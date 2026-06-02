@@ -1,18 +1,2 @@
-//
-//  Item.swift
-//  CampusLink
-//
-//  Created by Tyler Rong on 5/20/26.
-//
-
+// Placeholder — SwiftData model removed; app uses in-memory AppState.
 import Foundation
-import SwiftData
-
-@Model
-final class Item {
-    var timestamp: Date
-    
-    init(timestamp: Date) {
-        self.timestamp = timestamp
-    }
-}
