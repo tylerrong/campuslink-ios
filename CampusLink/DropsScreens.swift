@@ -189,22 +189,28 @@ struct DropsFeedScreen: View {
                 .padding(.bottom, 14)
 
                 HStack {
-                    Text("Open Drops")
+                    Text("Opportunities")
                         .font(.display(20, weight: .heavy))
                         .foregroundColor(theme.text)
                     Spacer()
-                    Text("\(liveCount) live")
-                        .font(.bodyFont(13, weight: .bold))
-                        .foregroundColor(theme.accentGreen)
+                    if state.isLoadingFeed {
+                        ProgressView()
+                    } else {
+                        Text("\(liveCount) live")
+                            .font(.bodyFont(13, weight: .bold))
+                            .foregroundColor(theme.accentGreen)
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 12)
 
                 if drops.isEmpty {
                     CLEmptyState(
-                        icon: "bolt.slash",
-                        title: "No Drops right now",
-                        subtitle: "Check back soon — new school-matched Drops land throughout the day.",
+                        icon: "briefcase",
+                        title: state.isLoadingFeed ? "Loading…" : "No opportunities right now",
+                        subtitle: state.feedError.isEmpty
+                            ? "Brand-posted opportunities for your school will show up here."
+                            : state.feedError,
                         theme: theme
                     )
                     .padding(.top, 24)
@@ -230,6 +236,10 @@ struct DropsFeedScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.bg.ignoresSafeArea())
+        .refreshable {
+            await state.refreshOpportunities()
+            await state.refreshApplied()
+        }
         .onAppear { _ = state.expireStaleClaimsIfNeeded() }
     }
 
@@ -242,7 +252,7 @@ struct DropsFeedScreen: View {
                         .font(.bodyFont(13, weight: .bold))
                         .foregroundColor(theme.textMuted)
                 }
-                Text("Drops")
+                Text("Discover")
                     .font(.display(34, weight: .black))
                     .tracking(-1.0)
                     .foregroundColor(theme.text)
@@ -402,9 +412,11 @@ struct DropDetailScreen: View {
                                 .lineSpacing(3)
                         }
 
-                        factsGrid
+                        if !drop.isRemoteOpportunity {
+                            factsGrid
+                        }
 
-                        section("What you’ll do") {
+                        section(drop.isRemoteOpportunity ? "How it works" : "What you’ll do") {
                             VStack(alignment: .leading, spacing: 12) {
                                 ForEach(Array(drop.instructions.enumerated()), id: \.offset) { i, step in
                                     HStack(alignment: .top, spacing: 12) {
@@ -421,12 +433,14 @@ struct DropDetailScreen: View {
                             }
                         }
 
-                        section("Proof required") {
-                            VStack(alignment: .leading, spacing: 10) {
-                                ForEach(drop.proofRequirements) { req in
-                                    Label(req.label, systemImage: icon(for: req.kind))
-                                        .font(.bodyFont(14, weight: .medium))
-                                        .foregroundColor(theme.text)
+                        if !drop.isRemoteOpportunity {
+                            section("Proof required") {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    ForEach(drop.proofRequirements) { req in
+                                        Label(req.label, systemImage: icon(for: req.kind))
+                                            .font(.bodyFont(14, weight: .medium))
+                                            .foregroundColor(theme.text)
+                                    }
                                 }
                             }
                         }
@@ -629,7 +643,21 @@ struct DropDetailScreen: View {
 
     private var bottomBar: some View {
         Group {
-            if let claim = existingClaim {
+            if drop.isRemoteOpportunity {
+                if drop.hasApplied {
+                    CLButton(label: "Applied", kind: .surface, size: .lg, full: true, theme: theme) {
+                        state.setTab(.active)
+                    }
+                } else if state.isEligible(drop) {
+                    CLButton(label: "Apply", kind: .primary, size: .lg, full: true, theme: theme) {
+                        haptic(.medium)
+                        state.acceptDrop(id: drop.id)
+                    }
+                } else {
+                    CLButton(label: "Not eligible", kind: .surface, size: .lg, full: true, theme: theme) {}
+                        .disabled(true)
+                }
+            } else if let claim = existingClaim {
                 if claim.status == .claimed {
                     CLButton(label: "Continue — submit proof", kind: .primary, size: .lg, full: true, theme: theme) {
                         state.push(.proofSubmit, id: claim.id)

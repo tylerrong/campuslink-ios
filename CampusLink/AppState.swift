@@ -52,11 +52,21 @@ class AppState {
     var payoutMethodLabel: String = "Add debit card"
 
     // MARK: Catalog + activity
-    var drops: [CampusDrop] = makeSampleDrops()
+    /// Live opportunities from joincampuslink.com (empty until signed in).
+    var drops: [CampusDrop] = []
     var claims: [DropClaim] = []
     var submissions: [DropSubmission] = []
     var ledger: [LedgerEntry] = []
     var notifications: [AppNotification] = []
+    var appliedOpportunities: [CampusDrop] = []
+    var isLoadingFeed = false
+    var feedError: String = ""
+
+    // MARK: Session (mirrored from AuthStore)
+    var sessionToken: String?
+    var remoteUser: RemoteUser?
+    /// Fired when an API call returns unauthorized — ContentView should sign out AuthStore.
+    var onSessionExpired: (() -> Void)?
 
     // MARK: Navigation
     var currentTab: AppTab = .drops
@@ -86,12 +96,111 @@ class AppState {
         currentTab = tab
     }
 
-    /// Return to onboarding splash (caller should also clear `onboardingDone` AppStorage).
+    /// Clear local session state (AuthStore clears Keychain separately).
     func logOut() {
         navigationPath.removeAll()
         currentTab = .drops
         onboardingStep = 0
         toastMessage = ""
+        sessionToken = nil
+        remoteUser = nil
+        drops = []
+        appliedOpportunities = []
+        claims = []
+        submissions = []
+        feedError = ""
+    }
+
+    func syncSession(token: String?, user: RemoteUser?) {
+        sessionToken = token
+        remoteUser = user
+        if let user {
+            profileKind = user.profile_type == "campus_org" ? .org : .student
+            if let name = Optional(user.name), !name.isEmpty {
+                if profileKind == .org { orgName = name } else { handle = name }
+            }
+            eduEmail = user.email
+            verificationStatus = user.registration_completed ? .verified : .unverified
+        }
+    }
+
+    @MainActor
+    func refreshOpportunities() async {
+        guard let token = sessionToken else { return }
+        isLoadingFeed = true
+        feedError = ""
+        defer { isLoadingFeed = false }
+        do {
+            let remote = try await APIClient.shared.fetchOpportunities(token: token)
+            drops = remote.map { CampusDrop.fromOpportunity($0) }
+        } catch {
+            if isUnauthorized(error) {
+                feedError = "Session expired. Sign in again."
+                handleSessionExpired()
+            } else {
+                feedError = error.localizedDescription
+                if drops.isEmpty {
+                    showToast(feedError, icon: "xmark")
+                }
+            }
+        }
+    }
+
+    @MainActor
+    func refreshApplied() async {
+        guard let token = sessionToken else { return }
+        do {
+            let remote = try await APIClient.shared.fetchApplied(token: token)
+            appliedOpportunities = remote.map { CampusDrop.fromOpportunity($0) }
+            let appliedIds = Set(appliedOpportunities.map(\.id))
+            for i in drops.indices where appliedIds.contains(drops[i].id) {
+                drops[i].hasApplied = true
+            }
+        } catch {
+            if isUnauthorized(error) {
+                handleSessionExpired()
+            }
+        }
+    }
+
+    private func isUnauthorized(_ error: Error) -> Bool {
+        if let api = error as? APIError, case .unauthorized = api { return true }
+        return false
+    }
+
+    private func handleSessionExpired() {
+        sessionToken = nil
+        remoteUser = nil
+        KeychainStore.clearToken()
+        onSessionExpired?()
+    }
+
+    @MainActor
+    func applyToOpportunity(id: String) async {
+        guard let token = sessionToken else {
+            showToast("Sign in to apply", icon: "xmark")
+            return
+        }
+        do {
+            try await APIClient.shared.apply(opportunityId: id, token: token)
+            if let idx = drops.firstIndex(where: { $0.id == id }) {
+                drops[idx].hasApplied = true
+            }
+            showToast("Applied", icon: "checkmark")
+            await refreshApplied()
+            pop()
+            setTab(.active)
+        } catch {
+            if isUnauthorized(error) {
+                handleSessionExpired()
+                showToast("Session expired. Sign in again.", icon: "xmark")
+            } else if let err = error as? APIError, case .registrationRequired(let url) = err {
+                showToast(err.localizedDescription ?? "Finish your profile", icon: "xmark")
+                if let url { await UIApplication.shared.open(url) }
+            } else {
+                showToast(error.localizedDescription, icon: "xmark")
+            }
+        }
     }
 
     var currentRoute: AppRoute? { navigationPath.last }
@@ -211,6 +320,10 @@ class AppState {
 
     @MainActor
     func acceptDrop(id: String) {
+        if let drop = drop(id: id), drop.isRemoteOpportunity {
+            Task { await applyToOpportunity(id: id) }
+            return
+        }
         expireStaleClaimsIfNeeded()
         guard let idx = drops.firstIndex(where: { $0.id == id }) else { return }
         let drop = drops[idx]

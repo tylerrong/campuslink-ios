@@ -33,9 +33,22 @@
 		E06B7A132FBEE2AD007090BB /* CampusLinkUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CampusLinkUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A1INFOPL1EXCLUDE0000000001 /* Exceptions for "CampusLink" folder in "CampusLink" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = E06B79F92FBEE2AC007090BB /* CampusLink */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		E06B79FC2FBEE2AC007090BB /* CampusLink */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A1INFOPL1EXCLUDE0000000001 /* Exceptions for "CampusLink" folder in "CampusLink" target */,
+			);
 			path = CampusLink;
 			sourceTree = "<group>";
 		};
@@ -407,6 +420,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CampusLink/Info.plist;
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Add a profile photo so brands and orgs recognize you on oncampus.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -452,6 +466,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CampusLink/Info.plist;
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Add a profile photo so brands and orgs recognize you on oncampus.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;

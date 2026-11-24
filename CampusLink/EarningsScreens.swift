@@ -195,8 +195,8 @@ struct CashOutScreen: View {
 // MARK: - You / Profile
 struct YouProfileScreen: View {
     @Bindable var state: AppState
+    @Bindable var auth: AuthStore
     let theme: CLTheme
-    @AppStorage("onboardingDone") private var onboardingDone = false
 
     var body: some View {
         CLScrollView(theme: theme, bottomFade: 40) {
@@ -278,7 +278,7 @@ struct YouProfileScreen: View {
                     theme: theme
                 ) {
                     haptic(.medium)
-                    onboardingDone = false
+                    auth.signOut()
                     state.logOut()
                 }
                 .padding(.horizontal, 20)

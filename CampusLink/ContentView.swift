@@ -2,111 +2,61 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var appState = AppState()
+    @State private var auth = AuthStore()
     private let theme = CLTheme.light()
-    @AppStorage("onboardingDone") private var onboardingDone = false
 
     var body: some View {
         Group {
-            if onboardingDone || appState.onboardingStep >= 6 {
-                MainApp(state: appState, theme: theme)
+            if auth.isRestoring {
+                ZStack {
+                    theme.bg.ignoresSafeArea()
+                    ProgressView()
+                }
+            } else if !auth.isSignedIn {
+                SignInView(auth: auth, theme: theme)
+            } else if auth.needsWebOnboarding {
+                IncompleteProfileView(auth: auth, theme: theme)
             } else {
-                OnboardingFlow(state: appState, theme: theme)
+                MainApp(state: appState, auth: auth, theme: theme)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .preferredColorScheme(.light)
-        .onChange(of: appState.onboardingStep) { _, newValue in
-            if newValue >= 6 { onboardingDone = true }
+        .onOpenURL { url in
+            Task { await auth.handleIncomingURL(url) }
         }
-    }
-}
-
-// MARK: - Onboarding Router
-struct OnboardingFlow: View {
-    @Bindable var state: AppState
-    let theme: CLTheme
-
-    var body: some View {
-        ZStack {
-            theme.bg.ignoresSafeArea()
-            switch state.onboardingStep {
-            case 0:
-                SplashView(theme: theme) { state.onboardingStep = 1 }
-                    .transition(.opacity)
-            case 1:
-                OnRoleView(
-                    profileKind: $state.profileKind,
-                    theme: theme,
-                    onNext: { state.onboardingStep = 2 },
-                    onBack: { state.onboardingStep = 0 }
-                )
-                .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
-            case 2:
-                OnSchoolView(
-                    schoolId: $state.schoolId,
-                    year: $state.year,
-                    showYear: state.profileKind == .student,
-                    theme: theme,
-                    onNext: { state.onboardingStep = 3 },
-                    onBack: { state.onboardingStep = 1 }
-                )
-                .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
-            case 3:
-                OnVerifyView(
-                    eduEmail: $state.eduEmail,
-                    verificationStatus: $state.verificationStatus,
-                    schoolName: state.school.name,
-                    theme: theme,
-                    onNext: { state.onboardingStep = 4 },
-                    onBack: { state.onboardingStep = 2 },
-                    onSubmit: { email in state.submitVerification(email: email) }
-                )
-                .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
-            case 4:
-                Group {
-                    if state.profileKind == .student {
-                        OnInterestsView(
-                            interests: $state.interests,
-                            theme: theme,
-                            onNext: { state.onboardingStep = 5 },
-                            onBack: { state.onboardingStep = 3 }
-                        )
-                    } else {
-                        OnOrgDetailsView(
-                            orgName: $state.orgName,
-                            orgType: $state.orgType,
-                            orgMemberCount: $state.orgMemberCount,
-                            theme: theme,
-                            onNext: { state.onboardingStep = 5 },
-                            onBack: { state.onboardingStep = 3 }
-                        )
-                    }
+        .onChange(of: auth.sessionToken) { _, token in
+            appState.syncSession(token: token, user: auth.user)
+            if token != nil {
+                Task {
+                    await appState.refreshOpportunities()
+                    await appState.refreshApplied()
                 }
-                .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
-            case 5:
-                OnHandleView(
-                    handle: $state.handle,
-                    isOrg: state.profileKind == .org,
-                    orgName: state.orgName,
-                    theme: theme,
-                    onDone: {
-                        withAnimation { state.onboardingStep = 6 }
-                    },
-                    onBack: { state.onboardingStep = 4 }
-                )
-                .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
-            default:
-                EmptyView()
+            } else {
+                appState.logOut()
             }
         }
-        .animation(.easeOut(duration: 0.28), value: state.onboardingStep)
+        .onChange(of: auth.user?.id) { _, _ in
+            appState.syncSession(token: auth.sessionToken, user: auth.user)
+        }
+        .task(id: auth.isSignedIn) {
+            guard auth.isSignedIn else { return }
+            appState.onSessionExpired = {
+                auth.signOut()
+                appState.logOut()
+            }
+            appState.syncSession(token: auth.sessionToken, user: auth.user)
+            await appState.refreshOpportunities()
+            await appState.refreshApplied()
+        }
     }
 }
 
 // MARK: - Main App
 struct MainApp: View {
     @Bindable var state: AppState
+    @Bindable var auth: AuthStore
     let theme: CLTheme
 
     var body: some View {
@@ -124,7 +74,6 @@ struct MainApp: View {
                         onTab: { state.setTab($0) }
                     )
                 }
-                // Root: gesture attached but won't begin (stack depth == 1).
                 .clInteractivePopGesture()
                 .navigationDestination(for: AppRoute.self) { route in
                     routeScreen(route)
@@ -132,10 +81,8 @@ struct MainApp: View {
                         .toolbar(.hidden, for: .navigationBar)
                         .toolbarBackground(.hidden, for: .navigationBar)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        // Destinations: re-enable system edge swipe-back under hidden back button.
                         .clInteractivePopGesture()
                         .overlay(alignment: .leading) {
-                            // Narrow leading-edge fallback if UIKit pop isn't attached yet.
                             Color.clear
                                 .frame(width: 20)
                                 .frame(maxHeight: .infinity)
@@ -144,7 +91,8 @@ struct MainApp: View {
                                     DragGesture(minimumDistance: 20, coordinateSpace: .global)
                                         .onEnded { value in
                                             let swipedRight = value.translation.width > 70
-                                            let mostlyHorizontal = abs(value.translation.width) > abs(value.translation.height) * 1.2
+                                            let mostlyHorizontal =
+                                                abs(value.translation.width) > abs(value.translation.height) * 1.2
                                             if swipedRight && mostlyHorizontal {
                                                 state.pop()
                                             }
@@ -172,7 +120,7 @@ struct MainApp: View {
             tabPage(.drops) { DropsFeedScreen(state: state, theme: theme) }
             tabPage(.active) { ActiveDropsScreen(state: state, theme: theme) }
             tabPage(.earnings) { EarningsScreen(state: state, theme: theme) }
-            tabPage(.you) { YouProfileScreen(state: state, theme: theme) }
+            tabPage(.you) { YouProfileScreen(state: state, auth: auth, theme: theme) }
         }
     }
 
@@ -186,7 +134,6 @@ struct MainApp: View {
             .allowsHitTesting(selected)
             .accessibilityHidden(!selected)
             .zIndex(selected ? 1 : 0)
-            // Keep page swaps instant even when the tab bar animates.
             .transaction { $0.animation = nil }
     }
 

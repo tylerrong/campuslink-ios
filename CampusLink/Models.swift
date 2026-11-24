@@ -109,6 +109,9 @@ struct CampusDrop: Identifiable, Hashable {
     let audience: AudienceFilter
     var status: DropStatus
     let estimatedMinutes: Int
+    /// True when this card is a joincampuslink.com opportunity (not a local mock Drop).
+    var isRemoteOpportunity: Bool
+    var hasApplied: Bool
 
     init(
         id: String,
@@ -131,7 +134,9 @@ struct CampusDrop: Identifiable, Hashable {
         eligibilityTags: [String],
         audience: AudienceFilter,
         status: DropStatus,
-        estimatedMinutes: Int
+        estimatedMinutes: Int,
+        isRemoteOpportunity: Bool = false,
+        hasApplied: Bool = false
     ) {
         self.id = id
         self.brand = brand
@@ -154,12 +159,20 @@ struct CampusDrop: Identifiable, Hashable {
         self.audience = audience
         self.status = status
         self.estimatedMinutes = estimatedMinutes
+        self.isRemoteOpportunity = isRemoteOpportunity
+        self.hasApplied = hasApplied
     }
 
-    var payoutLabel: String { payoutCents.dollarsCompact }
+    var payoutLabel: String {
+        if isRemoteOpportunity { return "Apply" }
+        return payoutCents.dollarsCompact
+    }
 
     var isLive: Bool {
-        status == .live && endAt > Date() && remainingSlots > 0
+        if isRemoteOpportunity {
+            return status == .live && endAt > Date()
+        }
+        return status == .live && endAt > Date() && remainingSlots > 0
     }
 
     var schoolLabel: String {
@@ -170,7 +183,10 @@ struct CampusDrop: Identifiable, Hashable {
     }
 
     var spotsLabel: String {
-        "\(remainingSlots)/\(maxCompletions) spots left"
+        if isRemoteOpportunity {
+            return hasApplied ? "Applied" : "Open opportunity"
+        }
+        return "\(remainingSlots)/\(maxCompletions) spots left"
     }
 
     var timeLeftLabel: String {

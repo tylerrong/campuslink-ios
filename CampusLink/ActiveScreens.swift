@@ -3,7 +3,7 @@ import PhotosUI
 import Combine
 import UIKit
 
-// MARK: - Active claims
+// MARK: - Active / Applied
 struct ActiveDropsScreen: View {
     @Bindable var state: AppState
     let theme: CLTheme
@@ -12,55 +12,62 @@ struct ActiveDropsScreen: View {
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private var claims: [DropClaim] { state.activeClaims }
+    private var applied: [CampusDrop] { state.appliedOpportunities }
 
     var body: some View {
         CLScrollView(theme: theme, bottomFade: 40) {
             VStack(alignment: .leading, spacing: 0) {
                 CLScreenHeader(
                     title: "Active",
-                    subtitle: claims.isEmpty
-                        ? "Nothing racing the clock — grab a Drop."
-                        : "Finish strong. Timers are live.",
+                    subtitle: applied.isEmpty && claims.isEmpty
+                        ? "Apply to an opportunity to track it here."
+                        : "Your applications and in-progress work.",
                     theme: theme
                 )
 
-                if !claims.isEmpty {
+                if !applied.isEmpty {
                     HStack(spacing: 12) {
                         CLColorStatCard(
-                            title: "In play",
-                            value: "\(claims.count)",
-                            detail: "open claims",
-                            icon: "bolt.fill",
-                            fill: theme.accentOrange,
-                            compact: true
-                        )
-                        CLColorStatCard(
-                            title: "On the line",
-                            value: claims.compactMap { state.drop(id: $0.dropId)?.payoutCents }.reduce(0, +).dollarsCompact,
-                            detail: "if approved",
-                            icon: "banknote.fill",
+                            title: "Applied",
+                            value: "\(applied.count)",
+                            detail: "opportunities",
+                            icon: "briefcase.fill",
                             fill: theme.accentBlue,
                             compact: true
                         )
                     }
                     .padding(.horizontal, 20)
                     .padding(.bottom, 18)
+
+                    Text("Applied opportunities")
+                        .font(.display(17, weight: .bold))
+                        .foregroundColor(theme.text)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 10)
+
+                    VStack(spacing: 12) {
+                        ForEach(applied) { drop in
+                            AppliedOpportunityCard(
+                                drop: drop,
+                                theme: theme,
+                                onOpen: { state.push(.dropDetail, id: drop.id) }
+                            )
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 24)
                 }
 
-                if claims.isEmpty {
-                    CLEmptyState(
-                        icon: "clock",
-                        title: "Nothing in progress",
-                        subtitle: "Accept a Drop to reserve a spot. Your personal deadline starts immediately.",
-                        actionLabel: "Browse Drops",
-                        action: { state.setTab(.drops) },
-                        theme: theme
-                    )
-                    .padding(.top, 48)
-                } else {
+                if !claims.isEmpty {
+                    Text("In-progress Drops")
+                        .font(.display(17, weight: .bold))
+                        .foregroundColor(theme.text)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 10)
+
                     VStack(spacing: 12) {
                         ForEach(claims) { claim in
-                            if let drop = state.drop(id: claim.dropId) {
+                            if let drop = state.drop(id: claim.dropId), !drop.isRemoteOpportunity {
                                 ActiveClaimCard(
                                     claim: claim,
                                     drop: drop,
@@ -76,17 +83,78 @@ struct ActiveDropsScreen: View {
                     .padding(.horizontal, 20)
                 }
 
+                if applied.isEmpty && claims.isEmpty {
+                    CLEmptyState(
+                        icon: "clock",
+                        title: "Nothing in progress",
+                        subtitle: "Apply to a brand opportunity on Discover. Brands follow up on CampusLink.",
+                        actionLabel: "Browse opportunities",
+                        action: { state.setTab(.drops) },
+                        theme: theme
+                    )
+                    .padding(.top, 48)
+                }
+
                 Color.clear.frame(height: 100)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.bg.ignoresSafeArea())
+        .refreshable { await state.refreshApplied() }
+        .task { await state.refreshApplied() }
         .onReceive(timer) { date in
             guard state.currentTab == .active else { return }
             tick = date
             _ = state.expireStaleClaimsIfNeeded()
         }
+    }
+}
+
+struct AppliedOpportunityCard: View {
+    let drop: CampusDrop
+    let theme: CLTheme
+    let onOpen: () -> Void
+
+    var body: some View {
+        Button(action: onOpen) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(drop.brandColor.opacity(0.15))
+                        Text(drop.initials)
+                            .font(.display(14, weight: .bold))
+                            .foregroundColor(drop.brandColor)
+                    }
+                    .frame(width: 44, height: 44)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(drop.brand)
+                            .font(.bodyFont(12, weight: .semibold))
+                            .foregroundColor(theme.primary)
+                        Text(drop.title)
+                            .font(.display(16, weight: .bold))
+                            .foregroundColor(theme.text)
+                            .lineLimit(2)
+                    }
+                    Spacer(minLength: 8)
+                    Text("Applied")
+                        .font(.bodyFont(12, weight: .bold))
+                        .foregroundColor(theme.accentGreen)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(theme.accentGreen.opacity(0.12)))
+                }
+
+                Text("Waiting for the brand to follow up on CampusLink.")
+                    .font(.bodyFont(13))
+                    .foregroundColor(theme.textMuted)
+            }
+            .padding(16)
+            .stickerOutline(fill: theme.surface, ink: theme.ink, cornerRadius: 16, borderWidth: theme.borderThinWidth)
+        }
+        .buttonStyle(CLPressStyle(scale: 0.985))
     }
 }
 
