@@ -9,22 +9,20 @@ private struct ObProgress: View {
     var body: some View {
         HStack(spacing: 12) {
             ZStack(alignment: .leading) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 4, style: .continuous).fill(theme.ink)
-                    RoundedRectangle(cornerRadius: 2, style: .continuous).fill(theme.surface).padding(theme.borderThinWidth)
-                }
-                .frame(height: 8)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(theme.line)
+                    .frame(height: 6)
                 GeometryReader { geo in
-                    RoundedRectangle(cornerRadius: 2)
+                    RoundedRectangle(cornerRadius: 4)
                         .fill(theme.primary)
                         .frame(width: geo.size.width * CGFloat(step) / CGFloat(total))
-                        .animation(.spring(response: 0.35), value: step)
+                        .animation(.easeOut(duration: 0.25), value: step)
                 }
-                .frame(height: 8)
+                .frame(height: 6)
             }
             Text("\(step)/\(total)")
                 .font(.display(13))
-                .foregroundColor(theme.text)
+                .foregroundColor(theme.textMuted)
                 .monospacedDigit()
         }
         .padding(.horizontal, 24)
@@ -32,7 +30,6 @@ private struct ObProgress: View {
     }
 }
 
-// MARK: - Back button
 private struct BackBtn: View {
     let theme: CLTheme
     let action: () -> Void
@@ -42,7 +39,7 @@ private struct BackBtn: View {
             HStack(spacing: 4) {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 14, weight: .bold))
-                Text("back")
+                Text("Back")
                     .font(.display(13, weight: .bold))
             }
             .foregroundColor(theme.text)
@@ -52,7 +49,6 @@ private struct BackBtn: View {
     }
 }
 
-// MARK: - Footer CTA button
 private struct ObFooter: View {
     let theme: CLTheme
     let label: String
@@ -63,20 +59,15 @@ private struct ObFooter: View {
         VStack(spacing: 0) {
             LinearGradient(colors: [theme.bg.opacity(0), theme.bg], startPoint: .top, endPoint: .bottom)
                 .frame(height: 32)
-            Button(action: action) {
-                Text(label)
-                    .font(.display(18))
-                    .foregroundColor(disabled ? theme.textFaint : .white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 56)
-                    .stickerCard(
-                        fill: disabled ? theme.surface : theme.primary,
-                        ink: theme.ink, cornerRadius: 28,
-                        shadow: disabled ? 0 : theme.shadowMd,
-                        borderWidth: theme.borderWidth
-                    )
-            }
-            .buttonStyle(.plain)
+            CLButton(
+                label: label,
+                kind: .primary,
+                size: .lg,
+                full: true,
+                theme: theme,
+                action: action
+            )
+            .opacity(disabled ? 0.45 : 1)
             .disabled(disabled)
             .padding(.horizontal, 24)
             .padding(.bottom, 34)
@@ -93,67 +84,180 @@ struct SplashView: View {
     @State private var appear = false
 
     var body: some View {
-        Button(action: onNext) {
-            ZStack {
-                theme.primary.ignoresSafeArea()
-                // Diagonal stripe pattern
-                Canvas { ctx, sz in
-                    for i in stride(from: -sz.width, to: sz.width * 2, by: 120) {
-                        var p = Path()
-                        p.move(to: CGPoint(x: i, y: 0))
-                        p.addLine(to: CGPoint(x: i + sz.height, y: sz.height))
-                        p.addLine(to: CGPoint(x: i + sz.height + 40, y: sz.height))
-                        p.addLine(to: CGPoint(x: i + 40, y: 0))
-                        p.closeSubpath()
-                        ctx.fill(p, with: .color(.white.opacity(0.05)))
+        ZStack {
+            Color(hex: "0B0B0D").ignoresSafeArea()
+            RadialGradient(
+                colors: [theme.primary.opacity(0.45), Color.clear],
+                center: .topTrailing,
+                startRadius: 20,
+                endRadius: 420
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+
+                Image("CLMarkWhite")
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .frame(width: 72, height: 72)
+                    .padding(20)
+                    .background(
+                        RoundedRectangle(cornerRadius: 28, style: .continuous)
+                            .fill(Color.white.opacity(0.10))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 28, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+                    )
+                    .scaleEffect(appear ? 1 : 0.94)
+
+                Image("CLWordmarkWhite")
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .frame(maxWidth: 260)
+                    .frame(height: 30)
+                    .padding(.top, 28)
+
+                Text("Drops that pay. Proof that verifies.\nEscrow that protects both sides.")
+                    .font(.bodyFont(16, weight: .medium))
+                    .foregroundColor(.white.opacity(0.72))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 36)
+                    .padding(.top, 14)
+
+                Spacer(minLength: 0)
+
+                Button(action: onNext) {
+                    HStack(spacing: 7) {
+                        Text("Get started")
+                            .font(.bodyFont(15, weight: .semibold))
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
                     }
+                    .foregroundColor(Color(hex: "0B0B0D"))
+                    .frame(height: 48)
+                    .padding(.horizontal, 20)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(Color.white)
+                    )
+                    .shadow(color: Color.black.opacity(0.18), radius: 12, x: 0, y: 6)
                 }
-                .ignoresSafeArea()
-
-                VStack(spacing: 0) {
-                    CLLogo(size: 120, color: .white)
-                        .scaleEffect(appear ? 1 : 0.3)
-                        .opacity(appear ? 1 : 0)
-                        .animation(.spring(response: 0.6, dampingFraction: 0.7), value: appear)
-
-                    Text("CampusLink")
-                        .font(.display(56))
-                        .foregroundColor(.white)
-                        .tracking(-1.5)
-                        .padding(.top, 28)
-                        .offset(y: appear ? 0 : 20)
-                        .opacity(appear ? 1 : 0)
-                        .animation(.spring(response: 0.7).delay(0.2), value: appear)
-
-                    Text("brands you love. on your campus.\ndrops you can't get anywhere else.")
-                        .font(.bodyFont(17, weight: .medium))
-                        .foregroundColor(.white.opacity(0.85))
-                        .multilineTextAlignment(.center)
-                        .padding(.top, 12)
-                        .offset(y: appear ? 0 : 20)
-                        .opacity(appear ? 1 : 0)
-                        .animation(.spring(response: 0.7).delay(0.35), value: appear)
-
-                    Text("tap to start →")
-                        .font(.display(14))
-                        .foregroundColor(theme.primary)
-                        .padding(.horizontal, 16).padding(.vertical, 8)
-                        .stickerCard(fill: .white, ink: theme.ink, cornerRadius: 999, shadow: theme.shadowSm, borderWidth: theme.borderThinWidth)
-                        .padding(.top, 40)
-                        .offset(y: appear ? 0 : 20)
-                        .opacity(appear ? 1 : 0)
-                        .animation(.spring(response: 0.7).delay(0.6), value: appear)
-                }
+                .buttonStyle(CLPressStyle(scale: 0.98))
+                .padding(.bottom, 52)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .buttonStyle(.plain)
-        .onAppear { appear = true }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear { withAnimation(.easeOut(duration: 0.45)) { appear = true } }
     }
 }
 
-// MARK: - School Logo (AsyncImage + initials fallback)
+// MARK: - Role
+struct OnRoleView: View {
+    @Binding var profileKind: ProfileKind
+    let theme: CLTheme
+    let onNext: () -> Void
+    let onBack: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ObProgress(step: 1, total: 5, theme: theme)
+            CLScrollView(theme: theme) {
+                VStack(alignment: .leading, spacing: 0) {
+                    BackBtn(theme: theme, action: onBack)
+                    Text("Who are you\nhere as?")
+                        .font(.display(34, weight: .bold))
+                        .foregroundColor(theme.text)
+                        .tracking(-1.2)
+                    Text("Students and campus orgs both earn from Drops. Your feed adapts to your role.")
+                        .font(.bodyFont(15))
+                        .foregroundColor(theme.textMuted)
+                        .padding(.top, 10)
+                        .padding(.bottom, 28)
+
+                    roleCard(
+                        kind: .student,
+                        title: "Student",
+                        subtitle: "Claim Drops for yourself — installs, surveys, social proof.",
+                        icon: "person.fill"
+                    )
+                    .padding(.bottom, 12)
+
+                    roleCard(
+                        kind: .org,
+                        title: "Campus org",
+                        subtitle: "Claim org-eligible Drops for your chapter, club, or team.",
+                        icon: "person.3.fill"
+                    )
+
+                    Color.clear.frame(height: 100)
+                }
+                .padding(.horizontal, 24)
+            }
+            ObFooter(theme: theme, label: "Continue", action: onNext)
+        }
+        .background(theme.bg.ignoresSafeArea())
+    }
+
+    private func roleCard(kind: ProfileKind, title: String, subtitle: String, icon: String) -> some View {
+        let sel = profileKind == kind
+        return Button {
+            haptic(.light)
+            profileKind = kind
+        } label: {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: icon)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(sel ? .white : theme.primary)
+                    .frame(width: 48, height: 48)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(sel ? theme.primary : theme.primary.opacity(0.10))
+                    )
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.display(18, weight: .bold))
+                        .foregroundColor(theme.text)
+                    Text(subtitle)
+                        .font(.bodyFont(14))
+                        .foregroundColor(theme.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: sel ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 22))
+                    .foregroundColor(sel ? theme.primary : theme.line)
+            }
+            .padding(16)
+            .stickerCard(
+                fill: theme.surface,
+                ink: theme.ink,
+                cornerRadius: 18,
+                shadow: sel ? theme.shadowSm : 0,
+                borderWidth: theme.borderThinWidth
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(sel ? theme.primary : Color.clear, lineWidth: 1.5)
+            )
+        }
+        .buttonStyle(CLPressStyle())
+    }
+}
+
+// MARK: - School Logo
 struct SchoolLogo: View {
     let school: School
+    var size: CGFloat = 46
+    var cornerRadius: CGFloat? = nil
+    var showBorder: Bool = true
+
+    private var radius: CGFloat { cornerRadius ?? size * 0.26 }
+    private var pad: CGFloat { size * 0.12 }
 
     var body: some View {
         Group {
@@ -161,11 +265,12 @@ struct SchoolLogo: View {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .padding(6)
-                    default:
+                        image.resizable().aspectRatio(contentMode: .fit).padding(pad)
+                    case .failure:
+                        initialsView
+                    case .empty:
+                        ProgressView().scaleEffect(0.7)
+                    @unknown default:
                         initialsView
                     }
                 }
@@ -173,18 +278,23 @@ struct SchoolLogo: View {
                 initialsView
             }
         }
-        .frame(width: 46, height: 46)
+        .frame(width: size, height: size)
         .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color(hex: "1a0e0e"), lineWidth: 2)
+            Group {
+                if showBorder {
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .strokeBorder(Color(hex: "E7E7EA"), lineWidth: 1)
+                }
+            }
         )
+        .accessibilityLabel(school.name)
     }
 
     private var initialsView: some View {
         Text(String(school.name.prefix(2)).uppercased())
-            .font(.system(size: 16, weight: .black, design: .rounded))
+            .font(.system(size: size * 0.34, weight: .bold))
             .foregroundColor(.white)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(school.color)
@@ -194,11 +304,14 @@ struct SchoolLogo: View {
 // MARK: - School picker
 struct OnSchoolView: View {
     @Binding var schoolId: String
+    @Binding var year: String
+    var showYear: Bool = true
     let theme: CLTheme
     let onNext: () -> Void
     let onBack: () -> Void
 
     @State private var query = ""
+    private let years = ["Freshman", "Sophomore", "Junior", "Senior", "Grad"]
 
     private var filtered: [School] {
         let q = query.lowercased()
@@ -208,23 +321,22 @@ struct OnSchoolView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ObProgress(step: 1, total: 4, theme: theme)
+            ObProgress(step: 2, total: 5, theme: theme)
             CLScrollView(theme: theme, topFade: 18) {
                 VStack(alignment: .leading, spacing: 0) {
                     BackBtn(theme: theme, action: onBack)
-                    Text("which school\nyou at?")
-                        .font(.display(36))
+                    Text("Which campus?")
+                        .font(.display(34, weight: .bold))
                         .foregroundColor(theme.text)
                         .tracking(-1.2)
-                    Text("we'll surface the brands sponsoring on your campus.")
+                    Text("Drops are matched to your school first.")
                         .font(.bodyFont(15))
                         .foregroundColor(theme.textMuted)
                         .padding(.top, 10).padding(.bottom, 20)
 
                     HStack(spacing: 8) {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundColor(theme.textMuted)
-                        TextField("search 1,400+ schools", text: $query)
+                        Image(systemName: "magnifyingglass").foregroundColor(theme.textMuted)
+                        TextField("Search schools", text: $query)
                             .font(.bodyFont(15))
                             .foregroundColor(theme.text)
                     }
@@ -235,181 +347,162 @@ struct OnSchoolView: View {
 
                     ForEach(filtered) { school in
                         let sel = school.id == schoolId
-                        Button {
-                            schoolId = school.id
-                        } label: {
+                        Button { schoolId = school.id } label: {
                             HStack(spacing: 14) {
-                                // Logo box — AsyncImage with initials fallback
                                 SchoolLogo(school: school)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(school.name).font(.display(17)).foregroundColor(theme.text)
-                                    Text("\(school.sub) · \(school.students) on app")
-                                        .font(.bodyFont(12, weight: .semibold))
+                                    Text(school.name).font(.display(17, weight: .bold)).foregroundColor(theme.text)
+                                    Text(school.sub)
+                                        .font(.bodyFont(12, weight: .medium))
                                         .foregroundColor(theme.textMuted)
                                 }
                                 Spacer()
-                                ZStack {
-                                    Circle().fill(theme.ink).frame(width: 28, height: 28)
-                                    Circle().fill(sel ? theme.text : theme.surface).padding(theme.borderThinWidth).frame(width: 28, height: 28)
-                                    if sel { Image(systemName: "checkmark").font(.system(size: 13, weight: .black)).foregroundColor(.white) }
-                                }
+                                Image(systemName: sel ? "checkmark.circle.fill" : "circle")
+                                    .foregroundColor(sel ? theme.primary : theme.line)
+                                    .font(.system(size: 22))
                             }
                             .padding(14)
-                            .stickerCard(fill: sel ? theme.yellow : theme.surface, ink: theme.ink, cornerRadius: 18, shadow: sel ? theme.shadowSm : 0, borderWidth: theme.borderThinWidth)
+                            .stickerCard(fill: theme.surface, ink: theme.ink, cornerRadius: 16, shadow: 0, borderWidth: theme.borderThinWidth)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(CLPressStyle())
                         .padding(.bottom, 10)
                     }
-                    Color.clear.frame(height: 120)
-                }
-                .padding(.horizontal, 24)
-            }
-            ObFooter(theme: theme, label: "next", disabled: schoolId.isEmpty, action: onNext)
-        }
-        .background(theme.bg.ignoresSafeArea())
-    }
-}
 
-// MARK: - Role / Year picker
-struct OnRoleView: View {
-    @Binding var role: AppRole
-    @Binding var year: String
-    let theme: CLTheme
-    let onNext: () -> Void
-    let onBack: () -> Void
+                    if showYear {
+                        Text("Year")
+                            .font(.eyebrow(11))
+                            .tracking(0.6)
+                            .textCase(.uppercase)
+                            .foregroundColor(theme.textMuted)
+                            .padding(.top, 18)
+                            .padding(.bottom, 10)
 
-    private let years = ["Freshman", "Sophomore", "Junior", "Senior"]
-    private let orgTypes = ["Fraternity", "Sorority", "Club", "Athletics", "Other"]
-
-    var body: some View {
-        VStack(spacing: 0) {
-            ObProgress(step: 2, total: 4, theme: theme)
-            CLScrollView(theme: theme, topFade: 18) {
-                VStack(alignment: .leading, spacing: 0) {
-                    BackBtn(theme: theme, action: onBack)
-                    Text("who are you\non campus?")
-                        .font(.display(36))
-                        .foregroundColor(theme.text)
-                        .tracking(-1.2)
-                    Text("you can switch roles anytime.")
-                        .font(.bodyFont(15))
-                        .foregroundColor(theme.textMuted)
-                        .padding(.top, 10).padding(.bottom, 24)
-
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                        roleCard(id: .student, label: "Student", desc: "connect with brands, score drops", icon: "★", color: theme.primary)
-                        roleCard(id: .org, label: "Org admin", desc: "get your events sponsored", icon: "Ω", color: theme.yellow)
-                    }
-                    .padding(.bottom, 28)
-
-                    Text("year")
-                        .font(.bodyFont(11, weight: .bold))
-                        .textCase(.uppercase)
-                        .tracking(0.6)
-                        .foregroundColor(theme.text).opacity(0.7)
-                        .padding(.bottom, 12)
-
-                    if role == .student {
                         FlowLayout(spacing: 8) {
                             ForEach(years, id: \.self) { y in
                                 CLChip(label: y, selected: year == y, theme: theme) { year = y }
                             }
                         }
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
-                    } else {
-                        FlowLayout(spacing: 8) {
-                            ForEach(orgTypes, id: \.self) { t in
-                                CLChip(label: t, selected: year == t, theme: theme) { year = t }
-                            }
-                        }
-                        .padding(.bottom, 16)
-                        CLCard(theme: theme, fill: theme.surfaceAlt, padding: 14) {
-                            HStack(alignment: .top, spacing: 12) {
-                                Image(systemName: "lock.fill")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(theme.text)
-                                Text("we'll verify your org with a .edu email + current member roster. takes ~24h.")
-                                    .font(.bodyFont(13))
-                                    .foregroundColor(theme.text)
-                                    .lineSpacing(2)
-                            }
-                        }
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
+
                     Color.clear.frame(height: 120)
                 }
                 .padding(.horizontal, 24)
-                .animation(.spring(response: 0.3), value: role)
             }
-            ObFooter(theme: theme, label: "next", disabled: year.isEmpty, action: onNext)
+            ObFooter(theme: theme, label: "Continue", disabled: schoolId.isEmpty, action: onNext)
         }
         .background(theme.bg.ignoresSafeArea())
     }
-
-    @ViewBuilder
-    private func roleCard(id: AppRole, label: String, desc: String, icon: String, color: Color) -> some View {
-        let sel = role == id
-        Button { role = id } label: {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(icon)
-                    .font(.display(22))
-                    .foregroundColor(sel ? color : (color == theme.yellow ? theme.text : .white))
-                    .frame(width: 44, height: 44)
-                    .stickerCard(fill: sel ? .white : color, ink: theme.ink, cornerRadius: 14, shadow: theme.shadowSm, borderWidth: theme.borderThinWidth)
-                Text(label).font(.display(18)).foregroundColor(sel && color == theme.primary ? .white : theme.text)
-                Text(desc).font(.bodyFont(13)).foregroundColor((sel && color == theme.primary ? Color.white : theme.text).opacity(0.9)).lineSpacing(2)
-                Spacer()
-            }
-            .padding(18)
-            .frame(maxWidth: .infinity, minHeight: 140, alignment: .topLeading)
-            .stickerCard(fill: sel ? color : theme.surface, ink: theme.ink, cornerRadius: 20, shadow: sel ? theme.shadowMd : 0, borderWidth: theme.borderThinWidth)
-        }
-        .buttonStyle(.plain)
-    }
 }
 
-// MARK: - Interests picker
-struct OnInterestsView: View {
-    @Binding var interests: [String]
-    let role: AppRole
+// MARK: - Verify
+struct OnVerifyView: View {
+    @Binding var eduEmail: String
+    @Binding var verificationStatus: VerificationStatus
+    let schoolName: String
     let theme: CLTheme
     let onNext: () -> Void
     let onBack: () -> Void
+    let onSubmit: (String) -> Void
 
-    private var isStudent: Bool { role == .student }
-    private var items: [Interest] { isStudent ? studentInterests : orgInterests }
-
-    private var headline: String { isStudent ? "what are you\ninto?" : "what are you\nlooking for?" }
-    private var subtitle: String {
-        isStudent
-            ? "pick at least 3. we'll match you to the right campaigns."
-            : "pick at least 3. we'll connect you with the right brands."
+    private var valid: Bool {
+        let e = eduEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return e.contains("@") && e.contains(".")
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            ObProgress(step: 3, total: 4, theme: theme)
-            VStack(alignment: .leading, spacing: 0) {
-                Group {
+            ObProgress(step: 3, total: 5, theme: theme)
+            CLScrollView(theme: theme) {
+                VStack(alignment: .leading, spacing: 0) {
                     BackBtn(theme: theme, action: onBack)
-                    Text(headline)
-                        .font(.display(36))
+                    Text("Verify your\nschool email")
+                        .font(.display(34, weight: .bold))
                         .foregroundColor(theme.text)
                         .tracking(-1.2)
-                    Text(subtitle)
+                    Text("Brands fund escrow for verified \(schoolName) students and orgs. You can finish this later.")
                         .font(.bodyFont(15))
                         .foregroundColor(theme.textMuted)
                         .padding(.top, 10)
-                    Text(interests.count == 0 ? "none selected" : "\(interests.count) selected")
-                        .font(.display(13))
-                        .foregroundColor(interests.count == 0 ? theme.textFaint : theme.primary)
+                        .padding(.bottom, 28)
+
+                    TextField("you@\(schoolName.lowercased()).edu", text: $eduEmail)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.emailAddress)
+                        .autocorrectionDisabled()
+                        .font(.bodyFont(16, weight: .medium))
+                        .padding(.horizontal, 16)
+                        .frame(height: 54)
+                        .stickerOutline(fill: theme.surface, ink: theme.ink, cornerRadius: 14, borderWidth: theme.borderThinWidth)
+
+                    if verificationStatus == .pending {
+                        Label("Check your inbox — verifying…", systemImage: "envelope.open")
+                            .font(.bodyFont(13, weight: .medium))
+                            .foregroundColor(theme.warning)
+                            .padding(.top, 14)
+                    } else if verificationStatus == .verified {
+                        Label("Verified", systemImage: "checkmark.seal.fill")
+                            .font(.bodyFont(13, weight: .semibold))
+                            .foregroundColor(theme.success)
+                            .padding(.top, 14)
+                    }
+
+                    Color.clear.frame(height: 120)
+                }
+                .padding(.horizontal, 24)
+            }
+            VStack(spacing: 10) {
+                ObFooter(theme: theme, label: verificationStatus == .verified ? "Continue" : "Send verification", disabled: !valid && verificationStatus != .verified) {
+                    if verificationStatus == .verified {
+                        onNext()
+                    } else {
+                        onSubmit(eduEmail)
+                    }
+                }
+                if verificationStatus != .verified {
+                    Button("Skip for now") { onNext() }
+                        .font(.bodyFont(14, weight: .semibold))
+                        .foregroundColor(theme.textMuted)
+                        .padding(.bottom, 24)
+                }
+            }
+        }
+        .background(theme.bg.ignoresSafeArea())
+        .onChange(of: verificationStatus) { _, status in
+            if status == .verified {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { onNext() }
+            }
+        }
+    }
+}
+
+// MARK: - Interests
+struct OnInterestsView: View {
+    @Binding var interests: [String]
+    let theme: CLTheme
+    let onNext: () -> Void
+    let onBack: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ObProgress(step: 4, total: 5, theme: theme)
+            VStack(alignment: .leading, spacing: 0) {
+                Group {
+                    BackBtn(theme: theme, action: onBack)
+                    Text("What should we\nmatch you with?")
+                        .font(.display(34, weight: .bold))
+                        .foregroundColor(theme.text)
+                        .tracking(-1.2)
+                    Text("Pick at least three. We’ll rank Drops around them.")
+                        .font(.bodyFont(15))
+                        .foregroundColor(theme.textMuted)
+                        .padding(.top, 10)
                         .padding(.bottom, 18)
                 }
                 .padding(.horizontal, 24)
 
                 CLScrollView(theme: theme, topFade: 18) {
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                        ForEach(items) { i in
+                        ForEach(studentInterests) { i in
                             let sel = interests.contains(i.id)
                             Button {
                                 if sel { interests.removeAll { $0 == i.id } }
@@ -417,30 +510,34 @@ struct OnInterestsView: View {
                             } label: {
                                 HStack(spacing: 10) {
                                     Image(systemName: i.icon)
-                                        .font(.system(size: 18, weight: .bold))
-                                        .frame(width: 26, alignment: .center)
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .frame(width: 22)
                                     Text(i.label)
-                                        .font(.display(15))
+                                        .font(.display(14, weight: .bold))
                                         .foregroundColor(sel ? .white : theme.text)
                                         .lineLimit(2)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                    Spacer()
+                                    Spacer(minLength: 0)
                                 }
                                 .padding(14)
                                 .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
-                                .stickerCard(fill: sel ? theme.primary : theme.surface, ink: theme.ink, cornerRadius: 18, shadow: sel ? theme.shadowSm : 0, borderWidth: theme.borderThinWidth)
+                                .stickerCard(
+                                    fill: sel ? theme.primary : theme.surface,
+                                    ink: theme.ink,
+                                    cornerRadius: 16,
+                                    shadow: 0,
+                                    borderWidth: theme.borderThinWidth
+                                )
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(CLPressStyle())
                         }
                         Color.clear.frame(height: 80)
                     }
                     .padding(.horizontal, 24)
                 }
-                .animation(.spring(response: 0.3), value: role)
             }
             ObFooter(
                 theme: theme,
-                label: interests.count < 3 ? "pick \(3 - interests.count) more" : "next",
+                label: interests.count < 3 ? "Choose \(3 - interests.count) more" : "Continue",
                 disabled: interests.count < 3,
                 action: onNext
             )
@@ -449,86 +546,177 @@ struct OnInterestsView: View {
     }
 }
 
-// MARK: - Handle picker
-struct OnHandleView: View {
-    @Binding var handle: String
+// MARK: - Org details
+struct OnOrgDetailsView: View {
+    @Binding var orgName: String
+    @Binding var orgType: OrgType
+    @Binding var orgMemberCount: String
     let theme: CLTheme
-    let onDone: () -> Void
+    let onNext: () -> Void
     let onBack: () -> Void
 
-    private var valid: Bool { handle.count >= 3 }
+    private var valid: Bool { orgName.trimmingCharacters(in: .whitespaces).count >= 2 }
 
     var body: some View {
         VStack(spacing: 0) {
-            ObProgress(step: 4, total: 4, theme: theme)
-            CLScrollView(theme: theme, topFade: 18) {
+            ObProgress(step: 4, total: 5, theme: theme)
+            CLScrollView(theme: theme) {
                 VStack(alignment: .leading, spacing: 0) {
                     BackBtn(theme: theme, action: onBack)
-                    Text("claim your\nhandle.")
-                        .font(.display(36))
+                    Text("Tell us about\nyour org")
+                        .font(.display(34, weight: .bold))
                         .foregroundColor(theme.text)
                         .tracking(-1.2)
-                    Text("brands + orgs will see this.")
+                    Text("Org-eligible Drops will show in your feed.")
                         .font(.bodyFont(15))
                         .foregroundColor(theme.textMuted)
-                        .padding(.top, 10).padding(.bottom, 28)
+                        .padding(.top, 10)
+                        .padding(.bottom, 24)
 
-                    // Avatar preview
-                    HStack {
-                        Spacer()
-                        ZStack(alignment: .bottomTrailing) {
-                            Text(handle.isEmpty ? "?" : String(handle.prefix(1).uppercased()))
-                                .font(.display(44))
-                                .foregroundColor(.white)
-                                .frame(width: 100, height: 100)
-                                .stickerCard(fill: theme.primary, ink: theme.ink, cornerRadius: 50, shadow: theme.shadowMd, borderWidth: theme.borderWidth)
-
-                            Image(systemName: "camera.fill")
-                                .font(.system(size: 14, weight: .heavy))
-                                .foregroundColor(theme.text)
-                                .frame(width: 36, height: 36)
-                                .stickerCard(fill: theme.yellow, ink: theme.ink, cornerRadius: 999, shadow: theme.shadowSm, borderWidth: theme.borderThinWidth)
-                                .offset(x: 4, y: 4)
-                        }
-                        Spacer()
-                    }
-                    .padding(.bottom, 28)
-
-                    HStack(spacing: 4) {
-                        Text("@")
-                            .font(.display(22))
-                            .foregroundColor(theme.textMuted)
-                        TextField("yourname", text: $handle)
-                            .font(.display(22))
-                            .foregroundColor(theme.text)
-                            .autocorrectionDisabled()
-                            .onChange(of: handle) { _, v in
-                                handle = String(v.filter { $0.isLetter || $0.isNumber || $0 == "_" }.lowercased().prefix(20))
-                            }
-                        if valid {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 20, weight: .black))
-                                .foregroundColor(theme.success)
-                        }
-                    }
-                    .frame(height: 56)
-                    .padding(.horizontal, 16)
-                    .stickerCard(fill: theme.surface, ink: theme.ink, cornerRadius: 16, shadow: valid ? theme.shadowSm : 0, borderWidth: theme.borderThinWidth)
-
-                    Text("campuslink.com/\(handle.isEmpty ? "yourname" : handle)")
-                        .font(.bodyFont(13, weight: .semibold))
+                    Text("Org name")
+                        .font(.eyebrow(11))
+                        .textCase(.uppercase)
                         .foregroundColor(theme.textMuted)
-                        .padding(.top, 10).padding(.leading, 4)
+                        .padding(.bottom, 8)
+                    TextField("e.g. Tri Delta, Startup Society", text: $orgName)
+                        .font(.bodyFont(16, weight: .medium))
+                        .padding(.horizontal, 16)
+                        .frame(height: 54)
+                        .stickerOutline(fill: theme.surface, ink: theme.ink, cornerRadius: 14, borderWidth: theme.borderThinWidth)
+
+                    Text("Type")
+                        .font(.eyebrow(11))
+                        .textCase(.uppercase)
+                        .foregroundColor(theme.textMuted)
+                        .padding(.top, 22)
+                        .padding(.bottom, 10)
+                    FlowLayout(spacing: 8) {
+                        ForEach(OrgType.allCases) { t in
+                            CLChip(label: t.rawValue, selected: orgType == t, theme: theme) { orgType = t }
+                        }
+                    }
+
+                    Text("Approx. members")
+                        .font(.eyebrow(11))
+                        .textCase(.uppercase)
+                        .foregroundColor(theme.textMuted)
+                        .padding(.top, 22)
+                        .padding(.bottom, 8)
+                    TextField("80", text: $orgMemberCount)
+                        .keyboardType(.numberPad)
+                        .font(.bodyFont(16, weight: .medium))
+                        .padding(.horizontal, 16)
+                        .frame(height: 54)
+                        .stickerOutline(fill: theme.surface, ink: theme.ink, cornerRadius: 14, borderWidth: theme.borderThinWidth)
+
+                    Color.clear.frame(height: 100)
                 }
                 .padding(.horizontal, 24)
             }
-            ObFooter(theme: theme, label: "enter campuslink →", disabled: !valid, action: onDone)
+            ObFooter(theme: theme, label: "Continue", disabled: !valid, action: onNext)
         }
         .background(theme.bg.ignoresSafeArea())
     }
 }
 
-// MARK: - FlowLayout helper (wrapping HStack)
+// MARK: - Handle / finish
+struct OnHandleView: View {
+    @Binding var handle: String
+    var isOrg: Bool = false
+    var orgName: String = ""
+    let theme: CLTheme
+    let onDone: () -> Void
+    let onBack: () -> Void
+
+    private var valid: Bool { isOrg ? true : handle.count >= 3 }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ObProgress(step: 5, total: 5, theme: theme)
+            CLScrollView(theme: theme, topFade: 18) {
+                VStack(alignment: .leading, spacing: 0) {
+                    BackBtn(theme: theme, action: onBack)
+                    Text(isOrg ? "You’re ready\nto claim Drops" : "Create your\nhandle")
+                        .font(.display(34, weight: .bold))
+                        .foregroundColor(theme.text)
+                        .tracking(-1.2)
+                    Text(isOrg
+                          ? "\(orgName.isEmpty ? "Your org" : orgName) will appear on submissions and earnings."
+                          : "Brands see this when they review your proof.")
+                        .font(.bodyFont(15))
+                        .foregroundColor(theme.textMuted)
+                        .padding(.top, 10).padding(.bottom, 28)
+
+                    HStack {
+                        Spacer()
+                        Text(avatarLetter)
+                            .font(.display(40, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 96, height: 96)
+                            .background(Circle().fill(theme.primary))
+                        Spacer()
+                    }
+                    .padding(.bottom, 28)
+
+                    if !isOrg {
+                        HStack(spacing: 4) {
+                            Text("@")
+                                .font(.display(22, weight: .bold))
+                                .foregroundColor(theme.textMuted)
+                            TextField("yourname", text: $handle)
+                                .font(.display(22, weight: .bold))
+                                .foregroundColor(theme.text)
+                                .autocorrectionDisabled()
+                                .onChange(of: handle) { _, v in
+                                    handle = String(v.filter { $0.isLetter || $0.isNumber || $0 == "_" }.lowercased().prefix(20))
+                                }
+                        }
+                        .frame(height: 56)
+                        .padding(.horizontal, 16)
+                        .stickerCard(fill: theme.surface, ink: theme.ink, cornerRadius: 16, shadow: 0, borderWidth: theme.borderThinWidth)
+
+                        Text("joincampuslink.com/\(handle.isEmpty ? "yourname" : handle)")
+                            .font(.bodyFont(13, weight: .medium))
+                            .foregroundColor(theme.textMuted)
+                            .padding(.top, 10)
+                    } else {
+                        escrowStrip
+                    }
+                }
+                .padding(.horizontal, 24)
+            }
+            ObFooter(theme: theme, label: "Enter CampusLink", disabled: !valid, action: onDone)
+        }
+        .background(theme.bg.ignoresSafeArea())
+    }
+
+    private var avatarLetter: String {
+        if isOrg {
+            return String((orgName.first ?? "O")).uppercased()
+        }
+        return handle.isEmpty ? "?" : String(handle.prefix(1).uppercased())
+    }
+
+    private var escrowStrip: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "lock.fill")
+                .foregroundColor(theme.primary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Escrow-backed Drops")
+                    .font(.display(14, weight: .semibold))
+                    .foregroundColor(theme.text)
+                Text("Brands pre-fund. You get paid when proof is approved.")
+                    .font(.bodyFont(13))
+                    .foregroundColor(theme.textMuted)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .stickerCard(fill: theme.surfaceAlt, ink: theme.ink, cornerRadius: 16, shadow: 0, borderWidth: theme.borderThinWidth)
+    }
+}
+
+// MARK: - FlowLayout
 struct FlowLayout: Layout {
     var spacing: CGFloat = 8
 

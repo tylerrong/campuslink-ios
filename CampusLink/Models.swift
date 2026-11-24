@@ -1,8 +1,35 @@
 import SwiftUI
 
-// MARK: - Data Models
+// MARK: - Profile
 
-struct School: Identifiable {
+enum ProfileKind: String, CaseIterable, Identifiable {
+    case student
+    case org
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .student: "Student"
+        case .org: "Campus org"
+        }
+    }
+}
+
+enum OrgType: String, CaseIterable, Identifiable {
+    case greek = "Greek life"
+    case club = "Club"
+    case team = "Team"
+    case creator = "Creator collective"
+
+    var id: String { rawValue }
+}
+
+enum VerificationStatus: String {
+    case unverified, pending, verified
+}
+
+struct School: Identifiable, Hashable {
     let id: String
     let name: String
     let sub: String
@@ -14,249 +41,484 @@ struct School: Identifiable {
 struct Interest: Identifiable {
     let id: String
     let label: String
-    let icon: String  // SF Symbol name
+    let icon: String
 }
 
-struct EventDrop {
-    let brand: String
-    let reward: String
+// MARK: - Drops
+
+enum DropCategory: String, CaseIterable, Identifiable {
+    case appInstall = "App install"
+    case survey = "Survey"
+    case socialPost = "Social post"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .appInstall: "arrow.down.app"
+        case .survey: "list.bullet.clipboard"
+        case .socialPost: "camera"
+        }
+    }
+
+    var estimatedMinutes: Int {
+        switch self {
+        case .appInstall: 10
+        case .survey: 8
+        case .socialPost: 15
+        }
+    }
 }
 
-struct CLEvent: Identifiable {
+enum DropStatus: String {
+    case live, ended
+}
+
+enum AudienceFilter: String {
+    case students, orgs, both
+}
+
+struct ProofRequirement: Identifiable, Hashable {
     let id: String
-    let org: String
-    let orgKind: String
+    let label: String
+    let kind: Kind
+
+    enum Kind: String { case screenshot, link, text, receipt }
+}
+
+struct CampusDrop: Identifiable, Hashable {
+    let id: String
+    let brand: String
+    let brandDomain: String?
+    /// Optional direct PNG/JPEG logo URL when domain lookup is weak.
+    let brandLogoUrl: String?
+    let brandColor: Color
     let title: String
-    let when: String
-    let where_: String
-    let coverGradient: [Color]
-    let going: Int
-    let drop: EventDrop?
-}
+    let description: String
+    let category: DropCategory
+    let payoutCents: Int
+    let maxCompletions: Int
+    var remainingSlots: Int
+    let schools: [String] // school ids; empty = all
+    let startAt: Date
+    let endAt: Date
+    let completionWindowSeconds: TimeInterval
+    let proofRequirements: [ProofRequirement]
+    let instructions: [String]
+    let eligibilityTags: [String]
+    let audience: AudienceFilter
+    var status: DropStatus
+    let estimatedMinutes: Int
 
-struct Opportunity: Identifiable {
-    let id: String
-    let brand: String
-    let title: String
-    let payout: String
-    let seats: String
-    let deadline: String
-    let accent: Color
-    let accentText: Color
-    let tags: [String]
-    let desc: String
-}
+    init(
+        id: String,
+        brand: String,
+        brandDomain: String? = nil,
+        brandLogoUrl: String? = nil,
+        brandColor: Color,
+        title: String,
+        description: String,
+        category: DropCategory,
+        payoutCents: Int,
+        maxCompletions: Int,
+        remainingSlots: Int,
+        schools: [String],
+        startAt: Date,
+        endAt: Date,
+        completionWindowSeconds: TimeInterval,
+        proofRequirements: [ProofRequirement],
+        instructions: [String],
+        eligibilityTags: [String],
+        audience: AudienceFilter,
+        status: DropStatus,
+        estimatedMinutes: Int
+    ) {
+        self.id = id
+        self.brand = brand
+        self.brandDomain = brandDomain
+        self.brandLogoUrl = brandLogoUrl
+        self.brandColor = brandColor
+        self.title = title
+        self.description = description
+        self.category = category
+        self.payoutCents = payoutCents
+        self.maxCompletions = maxCompletions
+        self.remainingSlots = remainingSlots
+        self.schools = schools
+        self.startAt = startAt
+        self.endAt = endAt
+        self.completionWindowSeconds = completionWindowSeconds
+        self.proofRequirements = proofRequirements
+        self.instructions = instructions
+        self.eligibilityTags = eligibilityTags
+        self.audience = audience
+        self.status = status
+        self.estimatedMinutes = estimatedMinutes
+    }
 
-struct DM: Identifiable {
-    let id: String
-    let brand: String
-    let last: String
-    let when: String
-    let unread: Int
-    let accent: Color
-    let accentText: Color
-}
+    var payoutLabel: String { payoutCents.dollarsCompact }
 
-struct Brand: Identifiable {
-    let id: String
-    let name: String
-    let cat: String
-    let vibe: String
-    let color: Color
-    let accent: Color
-    let openOpps: Int
-    let activeDrops: Int
-    let blurb: String
-    var logoUrl: String? = nil
+    var isLive: Bool {
+        status == .live && endAt > Date() && remainingSlots > 0
+    }
+
+    var schoolLabel: String {
+        if schools.isEmpty { return "All campuses" }
+        let names = schools.compactMap { id in sampleSchools.first { $0.id == id }?.name }
+        if names.count <= 2 { return names.joined(separator: ", ") }
+        return "\(names.prefix(2).joined(separator: ", ")) +\(names.count - 2)"
+    }
+
+    var spotsLabel: String {
+        "\(remainingSlots)/\(maxCompletions) spots left"
+    }
+
+    var timeLeftLabel: String {
+        let remaining = endAt.timeIntervalSinceNow
+        if remaining <= 0 { return "Ended" }
+        let hours = Int(remaining / 3600)
+        if hours >= 48 { return "\(hours / 24)d left" }
+        if hours >= 1 { return "\(hours)h left" }
+        let mins = max(1, Int(remaining / 60))
+        return "\(mins)m left"
+    }
 
     var initials: String {
-        name.split(separator: " ").prefix(2).map { String($0.prefix(1)) }.joined()
+        brand.split(separator: " ").prefix(2).map { String($0.prefix(1)) }.joined()
+    }
+
+    /// Real brand mark — Clearbit is dead; prefer explicit URL, else icon.horse PNG.
+    var logoUrl: String? {
+        if let brandLogoUrl { return brandLogoUrl }
+        guard let domain = brandDomain else { return nil }
+        return "https://icon.horse/icon/\(domain)"
     }
 }
 
-struct DealOffer: Identifiable {
-    let id: String
-    let brand: String
-    let eventTitle: String
-    let offerType: String      // "cash" | "product" | "popup" | "drop"
-    let offerValue: String     // "$1,400" | "300 cans"
-    let deliverables: [String]
-    let expires: String
-    let accent: Color
-    let accentText: Color
+enum ClaimStatus: String {
+    case claimed, submitted, expired
 }
 
-struct OrgEvent: Identifiable {
+struct DropClaim: Identifiable, Hashable {
     let id: String
+    let dropId: String
+    let acceptedAt: Date
+    var expiresAt: Date
+    var status: ClaimStatus
+}
+
+enum ReviewStatus: String, CaseIterable, Identifiable {
+    case pending = "Pending review"
+    case approved = "Approved"
+    case rejected = "Rejected"
+    case needsInfo = "Needs more info"
+
+    var id: String { rawValue }
+}
+
+struct DropSubmission: Identifiable, Hashable {
+    let id: String
+    let claimId: String
+    let dropId: String
+    var imageData: Data?
+    var link: String
+    var answer: String
+    var reviewStatus: ReviewStatus
+    var rejectionReason: String?
+    var submittedAt: Date
+    var reviewedAt: Date?
+}
+
+enum LedgerEntryType: String {
+    case pending
+    case payable
+    case paid
+    case reversed
+}
+
+struct LedgerEntry: Identifiable, Hashable {
+    let id: String
+    let dropId: String
+    let amountCents: Int
+    var type: LedgerEntryType
+    let createdAt: Date
+    var note: String
+}
+
+enum AppNotificationKind: String {
+    case newDrop, spotsLow, claimExpiring, approved, rejected, needsInfo, payout
+}
+
+struct AppNotification: Identifiable, Hashable {
+    let id: String
+    let kind: AppNotificationKind
     let title: String
-    let date: String
-    let kind: String
-    let est: Int
-    let status: OrgEventStatus
-    let sponsor: String?
-    let value: String?
-    var offerId: String? = nil   // links to DealOffer for sponsored events
-
-    enum OrgEventStatus: String {
-        case sponsored, pitching = "open-pitch", draft
-    }
+    let body: String
+    let createdAt: Date
+    var read: Bool
+    var relatedDropId: String?
 }
 
-// MARK: - Sample Data
+// MARK: - Sample data helpers
 
-// ESPN CDN: https://a.espncdn.com/i/teamlogos/ncaa/500/{id}.png
 private func espn(_ id: Int) -> String { "https://a.espncdn.com/i/teamlogos/ncaa/500/\(id).png" }
-private func brandLogo(_ domain: String) -> String { "https://logo.clearbit.com/\(domain)" }
 
 let sampleSchools: [School] = [
-    // Pac-12 / West Coast
     School(id: "usc",      name: "USC",           sub: "University of Southern California",   color: Color(hex: "990000"), students: "2.1k", logoUrl: espn(30)),
     School(id: "ucla",     name: "UCLA",           sub: "University of California, Los Angeles", color: Color(hex: "2774AE"), students: "3.4k", logoUrl: espn(26)),
+    School(id: "ucsb",     name: "UCSB",           sub: "UC Santa Barbara",                     color: Color(hex: "003660"), students: "1.5k", logoUrl: espn(12)),
+    School(id: "sdsu",     name: "SDSU",           sub: "San Diego State University",           color: Color(hex: "A6192E"), students: "1.8k", logoUrl: espn(21)),
     School(id: "stanford", name: "Stanford",       sub: "Stanford University",                  color: Color(hex: "8C1515"), students: "1.8k", logoUrl: espn(24)),
-    School(id: "oregon",   name: "Oregon",         sub: "University of Oregon",                 color: Color(hex: "154733"), students: "1.7k", logoUrl: espn(2483)),
-    School(id: "uw",       name: "Washington",     sub: "University of Washington",             color: Color(hex: "4B2E83"), students: "1.9k", logoUrl: espn(264)),
-    School(id: "asu",      name: "Arizona State",  sub: "Arizona State University",             color: Color(hex: "8C1D40"), students: "2.6k", logoUrl: espn(9)),
-    // Big Ten
     School(id: "umich",    name: "Michigan",       sub: "University of Michigan",               color: Color(hex: "00274C"), students: "1.9k", logoUrl: espn(130)),
-    School(id: "osu",      name: "Ohio State",     sub: "The Ohio State University",            color: Color(hex: "BB0000"), students: "3.1k", logoUrl: espn(194)),
-    School(id: "psu",      name: "Penn State",     sub: "Pennsylvania State University",        color: Color(hex: "041E42"), students: "2.7k", logoUrl: espn(213)),
-    School(id: "wisc",     name: "Wisconsin",      sub: "University of Wisconsin-Madison",      color: Color(hex: "C5050C"), students: "2.4k", logoUrl: espn(275)),
-    School(id: "iowa",     name: "Iowa",           sub: "University of Iowa",                   color: Color(hex: "FFCD00"), students: "1.7k", logoUrl: espn(2294)),
-    School(id: "nebraska", name: "Nebraska",       sub: "University of Nebraska-Lincoln",       color: Color(hex: "E41C38"), students: "2.0k", logoUrl: espn(158)),
-    School(id: "msu",      name: "Michigan State", sub: "Michigan State University",            color: Color(hex: "18453B"), students: "2.3k", logoUrl: espn(127)),
-    School(id: "nw",       name: "Northwestern",   sub: "Northwestern University",              color: Color(hex: "4E2A84"), students: "1.3k", logoUrl: espn(77)),
-    // Big 12
     School(id: "utexas",   name: "UT Austin",      sub: "University of Texas at Austin",        color: Color(hex: "BF5700"), students: "2.8k", logoUrl: espn(251)),
-    School(id: "tamu",     name: "Texas A&M",      sub: "Texas A&M University",                 color: Color(hex: "500000"), students: "2.5k", logoUrl: espn(245)),
-    School(id: "okla",     name: "Oklahoma",       sub: "University of Oklahoma",               color: Color(hex: "841617"), students: "2.0k", logoUrl: espn(201)),
-    School(id: "ttu",      name: "Texas Tech",     sub: "Texas Tech University",                color: Color(hex: "CC0000"), students: "2.1k", logoUrl: espn(2641)),
-    School(id: "baylor",   name: "Baylor",         sub: "Baylor University",                    color: Color(hex: "154734"), students: "1.7k", logoUrl: espn(239)),
-    // SEC
-    School(id: "alabama",  name: "Alabama",        sub: "University of Alabama",                color: Color(hex: "9E1B32"), students: "2.9k", logoUrl: espn(333)),
-    School(id: "georgia",  name: "Georgia",        sub: "University of Georgia",                color: Color(hex: "BA0C2F"), students: "2.4k", logoUrl: espn(61)),
-    School(id: "uf",       name: "Florida",        sub: "University of Florida",                color: Color(hex: "0021A5"), students: "2.6k", logoUrl: espn(57)),
-    School(id: "lsu",      name: "LSU",            sub: "Louisiana State University",           color: Color(hex: "461D7C"), students: "2.2k", logoUrl: espn(99)),
-    School(id: "tenn",     name: "Tennessee",      sub: "University of Tennessee",              color: Color(hex: "FF8200"), students: "2.1k", logoUrl: espn(2633)),
-    School(id: "auburn",   name: "Auburn",         sub: "Auburn University",                    color: Color(hex: "03244D"), students: "1.8k", logoUrl: espn(2)),
-    School(id: "vandy",    name: "Vanderbilt",     sub: "Vanderbilt University",                color: Color(hex: "866D4B"), students: "1.3k", logoUrl: espn(238)),
-    School(id: "kentucky", name: "Kentucky",       sub: "University of Kentucky",               color: Color(hex: "005DAA"), students: "1.9k", logoUrl: espn(96)),
-    // ACC
-    School(id: "duke",     name: "Duke",           sub: "Duke University",                      color: Color(hex: "003087"), students: "1.4k", logoUrl: espn(150)),
-    School(id: "unc",      name: "UNC",            sub: "University of North Carolina",         color: Color(hex: "4B9CD3"), students: "2.2k", logoUrl: espn(153)),
-    School(id: "clemson",  name: "Clemson",        sub: "Clemson University",                   color: Color(hex: "F56600"), students: "2.0k", logoUrl: espn(228)),
-    School(id: "fsu",      name: "Florida State",  sub: "Florida State University",             color: Color(hex: "782F40"), students: "2.3k", logoUrl: espn(52)),
-    School(id: "miami",    name: "Miami",          sub: "University of Miami",                  color: Color(hex: "005030"), students: "1.6k", logoUrl: espn(2390)),
-    // Independents
-    School(id: "nd",       name: "Notre Dame",     sub: "University of Notre Dame",             color: Color(hex: "0C2340"), students: "1.6k", logoUrl: espn(87)),
+    School(id: "nyu",      name: "NYU",            sub: "New York University",                  color: Color(hex: "57068C"), students: "2.2k", logoUrl: nil),
 ]
 
-// Student signup — campaign + opportunity focused
 let studentInterests: [Interest] = [
-    Interest(id: "campaigns",   label: "Brand campaigns",     icon: "megaphone.fill"),
-    Interest(id: "ambassador",  label: "Ambassador programs", icon: "star.fill"),
-    Interest(id: "ugc",         label: "UGC + content",       icon: "camera.fill"),
-    Interest(id: "paid",        label: "Paid gigs",           icon: "dollarsign"),
-    Interest(id: "freeproduct", label: "Free product",        icon: "gift.fill"),
-    Interest(id: "eventdrops",  label: "Event drops",         icon: "bolt.fill"),
-    Interest(id: "tabling",     label: "Tabling + pop-ups",   icon: "mappin.circle.fill"),
-    Interest(id: "merch",       label: "Merch + streetwear",  icon: "tshirt.fill"),
-    Interest(id: "foodbev",     label: "Food + bev brands",   icon: "cup.and.saucer.fill"),
-    Interest(id: "internships", label: "Internships",         icon: "briefcase.fill"),
-    Interest(id: "tech",        label: "Tech + apps",         icon: "iphone"),
-    Interest(id: "wellness",    label: "Wellness brands",     icon: "heart.fill"),
+    Interest(id: "apps", label: "Apps & tech", icon: "iphone"),
+    Interest(id: "content", label: "Content", icon: "video"),
+    Interest(id: "foodbev", label: "Food & bev", icon: "cup.and.saucer"),
+    Interest(id: "fitness", label: "Fitness", icon: "figure.run"),
+    Interest(id: "finance", label: "Finance", icon: "dollarsign.circle"),
+    Interest(id: "fashion", label: "Fashion", icon: "tshirt"),
+    Interest(id: "gaming", label: "Gaming", icon: "gamecontroller"),
+    Interest(id: "social", label: "Social impact", icon: "heart"),
 ]
 
-// Org admin signup — sponsorship + partnership focused
-let orgInterests: [Interest] = [
-    Interest(id: "eventspons",  label: "Event sponsorships",  icon: "ticket.fill"),
-    Interest(id: "brandpart",   label: "Brand partnerships",  icon: "handshake.fill"),
-    Interest(id: "paidactivate",label: "Paid activations",    icon: "dollarsign"),
-    Interest(id: "freeprod",    label: "Free product",        icon: "gift.fill"),
-    Interest(id: "social",      label: "Social collabs",      icon: "bubble.left.and.bubble.right.fill"),
-    Interest(id: "philanthropy",label: "Philanthropy support", icon: "heart.fill"),
-    Interest(id: "rush",        label: "Rush + recruitment",  icon: "person.3.fill"),
-    Interest(id: "community",   label: "Community building",  icon: "building.2.fill"),
-    Interest(id: "swag",        label: "Merch + swag",        icon: "tshirt.fill"),
-    Interest(id: "foodcater",   label: "Food + catering",     icon: "fork.knife"),
-]
-
-// Legacy alias — kept so any other reference doesn't break
-let sampleInterests: [Interest] = studentInterests
-
-// Pitch audience descriptors — who attends this event?
-let audienceInterests: [Interest] = [
-    Interest(id: "greek",      label: "Greek life",        icon: "sparkles"),
-    Interest(id: "athletes",   label: "Athletes",          icon: "figure.run"),
-    Interest(id: "stem",       label: "STEM crowd",        icon: "flask.fill"),
-    Interest(id: "business",   label: "Business students", icon: "briefcase.fill"),
-    Interest(id: "artsy",      label: "Arts + culture",    icon: "paintpalette.fill"),
-    Interest(id: "wellness",   label: "Health + wellness", icon: "heart.fill"),
-    Interest(id: "partiers",   label: "Party crowd",       icon: "party.popper.fill"),
-    Interest(id: "premeds",    label: "Pre-med / bio",     icon: "stethoscope"),
-    Interest(id: "law",        label: "Pre-law",           icon: "building.columns.fill"),
-    Interest(id: "outdoors",   label: "Outdoors / active", icon: "mountain.2.fill"),
-    Interest(id: "foodies",    label: "Food obsessed",     icon: "fork.knife"),
-    Interest(id: "techies",    label: "Tech / startup",    icon: "cpu.fill"),
-]
-
-let sampleEvents: [CLEvent] = [
-    CLEvent(id: "sigeprose",       org: "Sig Ep",            orgKind: "Fraternity", title: "Rose Formal",      when: "Fri · Apr 12 · 9PM",  where_: "The Wiltern",      coverGradient: [Color(hex: "FF1F1F"), Color(hex: "B30000")], going: 312, drop: EventDrop(brand: "Liquid Death", reward: "free 4-pack at the door")),
-    CLEvent(id: "tridelt-philanthropy", org: "Tri Delt",     orgKind: "Sorority",   title: "Delta Dash 5K",    when: "Sat · Apr 13 · 8AM",  where_: "Exposition Park",  coverGradient: [Color(hex: "FFD60A"), Color(hex: "FF8A00")], going: 187, drop: EventDrop(brand: "Celsius",     reward: "finisher 12-pack")),
-    CLEvent(id: "club-techweek",   org: "USC Startup Society",orgKind: "Club",      title: "TechWeek Pitch Night",when: "Wed · Apr 17 · 7PM",where_: "Cromwell Field",   coverGradient: [Color(hex: "0E0B0B"), Color(hex: "2A1F1F")], going: 96,  drop: nil),
-    CLEvent(id: "aphi-coffee",     org: "Alpha Phi",         orgKind: "Sorority",   title: "Coffee + Crepes",  when: "Sun · Apr 14 · 10AM", where_: "AΦ House",         coverGradient: [Color(hex: "FFC0D9"), Color(hex: "FF6B9B")], going: 64,  drop: EventDrop(brand: "Olipop",      reward: "free can + sticker")),
-]
-
-let sampleOpportunities: [Opportunity] = [
-    Opportunity(id: "liquid-death-ambo", brand: "Liquid Death", title: "Campus Ambassador · Spring drop", payout: "$400 + product",    seats: "8 spots",    deadline: "3d left",  accent: Color(hex: "0E0B0B"), accentText: .white,             tags: ["Ambassador","Content","4 weeks"], desc: "Run two on-campus sampling activations and post 3 organic IG Reels. Murder your thirst, get paid."),
-    Opportunity(id: "celsius-tabling",   brand: "Celsius",      title: "Game day tabling",               payout: "$250",              seats: "4 spots",    deadline: "6d left",  accent: Color(hex: "FFD60A"), accentText: Color(hex: "1a0e0e"), tags: ["Tabling","1 day"],               desc: "Sample Celsius outside the Coliseum gates 2 hours before kickoff."),
-    Opportunity(id: "duolingo-streak",   brand: "Duolingo",     title: "Streak Challenge · 21 days",     payout: "$50 + merch",       seats: "120 spots",  deadline: "12d left", accent: Color(hex: "58CC02"), accentText: .white,             tags: ["Challenge","Solo","In-app"],     desc: "Hit a 21-day streak and post your owl. Top 3 finishers get an extra $200."),
-    Opportunity(id: "olipop-popup",      brand: "Olipop",       title: "Sorority pop-up sponsor",        payout: "$1.2k for the chapter", seats: "1 chapter", deadline: "1w left", accent: Color(hex: "FF6B9B"), accentText: .white,            tags: ["Sponsorship","Org-only"],        desc: "Co-brand your next philanthropy event. Olipop covers product + signage."),
-]
-
-let sampleDMs: [DM] = [
-    DM(id: "liquid-death", brand: "Liquid Death", last: "sick. we ship the swag tomorrow 💀", when: "2m",   unread: 2, accent: Color(hex: "0E0B0B"), accentText: .white),
-    DM(id: "celsius",      brand: "Celsius",      last: "Can you do Saturday at 11?",          when: "1h",   unread: 0, accent: Color(hex: "FFD60A"), accentText: Color(hex: "1a0e0e")),
-    DM(id: "duolingo",     brand: "Duolingo",     last: "streak day 14 — keep going!",         when: "3h",   unread: 1, accent: Color(hex: "58CC02"), accentText: .white),
-    DM(id: "olipop",       brand: "Olipop",       last: "love the chapter pitch deck",         when: "yest", unread: 0, accent: Color(hex: "FF6B9B"), accentText: .white),
-]
-
-let sampleBrands: [Brand] = [
-    Brand(id: "liquid-death", name: "Liquid Death", cat: "Beverage", vibe: "irreverent", color: Color(hex: "0E0B0B"), accent: .white,                    openOpps: 3, activeDrops: 1, blurb: "murder your thirst — looking for ambassadors who post", logoUrl: brandLogo("liquiddeath.com")),
-    Brand(id: "celsius",      name: "Celsius",      cat: "Beverage", vibe: "fitness",    color: Color(hex: "FFD60A"), accent: Color(hex: "1a0e0e"),       openOpps: 4, activeDrops: 2, blurb: "energy that hits — game day tabling + content", logoUrl: brandLogo("celsius.com")),
-    Brand(id: "duolingo",     name: "Duolingo",     cat: "App",      vibe: "unhinged",   color: Color(hex: "58CC02"), accent: .white,                    openOpps: 2, activeDrops: 1, blurb: "the owl is watching — streak challenges all spring", logoUrl: brandLogo("duolingo.com")),
-    Brand(id: "olipop",       name: "Olipop",       cat: "Beverage", vibe: "wellness",   color: Color(hex: "FF6B9B"), accent: .white,                    openOpps: 5, activeDrops: 0, blurb: "modern soda for the org that vibes — sponsoring pop-ups", logoUrl: brandLogo("drinkolipop.com")),
-    Brand(id: "chipotle",     name: "Chipotle",     cat: "Food",     vibe: "always-on",  color: Color(hex: "A81612"), accent: .white,                    openOpps: 1, activeDrops: 1, blurb: "free bowls for chapters that show up", logoUrl: brandLogo("chipotle.com")),
-    Brand(id: "cashapp",      name: "Cash App",     cat: "Finance",  vibe: "culture",    color: Color(hex: "00D632"), accent: Color(hex: "1a0e0e"),       openOpps: 2, activeDrops: 0, blurb: "sending $$ to orgs that move money on campus", logoUrl: brandLogo("cash.app")),
-]
-
-let sampleOffers: [DealOffer] = [
-    DealOffer(
-        id: "celsius-formal",
-        brand: "Celsius",
-        eventTitle: "Rose Formal",
-        offerType: "cash",
-        offerValue: "$1,400",
-        deliverables: ["IG story at entry", "sample 200+ guests", "mention in chapter email blast"],
-        expires: "48h left",
-        accent: Color(hex: "FFD60A"),
-        accentText: Color(hex: "1a0e0e")
-    ),
-    DealOffer(
-        id: "liquid-death-dash",
-        brand: "Liquid Death",
-        eventTitle: "Delta Dash 5K",
-        offerType: "product",
-        offerValue: "300 cans",
-        deliverables: ["finisher photo post on IG", "logo on race bib"],
-        expires: "3d left",
-        accent: Color(hex: "0E0B0B"),
-        accentText: .white
-    ),
-]
-
-let sampleOrgEvents: [OrgEvent] = [
-    OrgEvent(id: "rose-formal-25",   title: "Rose Formal",       date: "Apr 12", kind: "Formal",      est: 350, status: .sponsored, sponsor: "Celsius",      value: "$1,400", offerId: "celsius-formal"),
-    OrgEvent(id: "philanthropy-5k",  title: "Delta Dash 5K",     date: "Apr 13", kind: "Philanthropy", est: 200, status: .pitching,  sponsor: nil,            value: nil),
-    OrgEvent(id: "rush-week-26",     title: "Rush Week Kickoff", date: "Aug 24", kind: "Recruitment", est: 500, status: .draft,     sponsor: nil,            value: nil),
-    OrgEvent(id: "date-party",       title: "Date Party · Disco",date: "May 3",  kind: "Social",      est: 120, status: .pitching,  sponsor: nil,            value: nil),
-]
+func makeSampleDrops(now: Date = Date()) -> [CampusDrop] {
+    [
+        CampusDrop(
+            id: "duet-download",
+            brand: "Duet",
+            brandDomain: "duetdisplay.com",
+            brandColor: Color(hex: "5B5FFF"),
+            title: "Install Duet and finish onboarding",
+            description: "Download Duet, create an account with your school email, and complete the first tutorial screen. Submit a screenshot of the home dashboard.",
+            category: .appInstall,
+            payoutCents: 2500,
+            maxCompletions: 100,
+            remainingSlots: 92,
+            schools: ["usc", "ucla", "ucsb"],
+            startAt: now.addingTimeInterval(-3600),
+            endAt: now.addingTimeInterval(60 * 60 * 22),
+            completionWindowSeconds: 2 * 60 * 60,
+            proofRequirements: [
+                ProofRequirement(id: "shot", label: "Screenshot of home dashboard", kind: .screenshot)
+            ],
+            instructions: [
+                "Install Duet from the App Store",
+                "Sign up with your .edu email",
+                "Complete onboarding until you see the home dashboard",
+                "Screenshot the dashboard and submit"
+            ],
+            eligibilityTags: ["iPhone", "Students"],
+            audience: .students,
+            status: .live,
+            estimatedMinutes: 10
+        ),
+        CampusDrop(
+            id: "notion-survey",
+            brand: "Notion",
+            brandDomain: "notion.so",
+            brandColor: Color(hex: "0B0B0D"),
+            title: "2-minute campus productivity survey",
+            description: "Answer five questions about how you plan your week. Honest answers only — no wrong responses.",
+            category: .survey,
+            payoutCents: 1200,
+            maxCompletions: 200,
+            remainingSlots: 148,
+            schools: [],
+            startAt: now.addingTimeInterval(-7200),
+            endAt: now.addingTimeInterval(60 * 60 * 48),
+            completionWindowSeconds: 60 * 60,
+            proofRequirements: [
+                ProofRequirement(id: "answers", label: "Survey responses", kind: .text)
+            ],
+            instructions: [
+                "Open the survey brief on the next screen",
+                "Answer all five prompts in your own words",
+                "Submit before your claim timer ends"
+            ],
+            eligibilityTags: ["Any device", "Students"],
+            audience: .students,
+            status: .live,
+            estimatedMinutes: 8
+        ),
+        CampusDrop(
+            id: "olipop-reel",
+            brand: "Olipop",
+            brandDomain: "drinkolipop.com",
+            brandLogoUrl: "https://drinkolipop.com/cdn/shop/files/favicon.png",
+            brandColor: Color(hex: "FF6B9B"),
+            title: "Post a campus taste-test Reel",
+            description: "Film a short Reel tasting Olipop on campus. Keep the can visible and tag @drinkolipop. Submit the live post link.",
+            category: .socialPost,
+            payoutCents: 4000,
+            maxCompletions: 40,
+            remainingSlots: 27,
+            schools: ["usc", "ucla"],
+            startAt: now.addingTimeInterval(-1800),
+            endAt: now.addingTimeInterval(60 * 60 * 36),
+            completionWindowSeconds: 6 * 60 * 60,
+            proofRequirements: [
+                ProofRequirement(id: "link", label: "Public Reel link", kind: .link),
+                ProofRequirement(id: "shot", label: "Screenshot of the posted Reel", kind: .screenshot)
+            ],
+            instructions: [
+                "Film on campus with the product in frame",
+                "Post publicly and tag @drinkolipop",
+                "Paste the live link and a screenshot"
+            ],
+            eligibilityTags: ["Creators", "Students"],
+            audience: .students,
+            status: .live,
+            estimatedMinutes: 15
+        ),
+        CampusDrop(
+            id: "celsius-checkin",
+            brand: "Celsius",
+            brandDomain: "celsius.com",
+            brandColor: Color(hex: "FFD60A"),
+            title: "Chapter sampling check-in",
+            description: "For campus orgs only. Confirm you can host a 90-minute sampling window this week and upload a venue photo.",
+            category: .survey,
+            payoutCents: 7500,
+            maxCompletions: 12,
+            remainingSlots: 8,
+            schools: ["usc", "ucla", "sdsu"],
+            startAt: now.addingTimeInterval(-4000),
+            endAt: now.addingTimeInterval(60 * 60 * 70),
+            completionWindowSeconds: 12 * 60 * 60,
+            proofRequirements: [
+                ProofRequirement(id: "shot", label: "Venue / house photo", kind: .screenshot),
+                ProofRequirement(id: "text", label: "Proposed time window", kind: .text)
+            ],
+            instructions: [
+                "Confirm org leadership approval",
+                "Photo the proposed sampling location",
+                "List your preferred 90-minute window"
+            ],
+            eligibilityTags: ["Campus orgs", "Greek / clubs"],
+            audience: .orgs,
+            status: .live,
+            estimatedMinutes: 12
+        ),
+        CampusDrop(
+            id: "robinhood-app",
+            brand: "Robinhood",
+            brandDomain: "robinhood.com",
+            brandLogoUrl: "https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://robinhood.com&size=256",
+            brandColor: Color(hex: "00C805"),
+            title: "Open Robinhood and verify identity step",
+            description: "Download Robinhood, reach the identity verification screen, and submit a screenshot. Do not submit sensitive ID details — only the in-app progress screen.",
+            category: .appInstall,
+            payoutCents: 3000,
+            maxCompletions: 80,
+            remainingSlots: 61,
+            schools: ["usc", "stanford", "ucla"],
+            startAt: now.addingTimeInterval(-5000),
+            endAt: now.addingTimeInterval(60 * 60 * 28),
+            completionWindowSeconds: 3 * 60 * 60,
+            proofRequirements: [
+                ProofRequirement(id: "shot", label: "Identity step screenshot", kind: .screenshot)
+            ],
+            instructions: [
+                "Install Robinhood",
+                "Create an account with your school email",
+                "Advance to the identity verification step",
+                "Screenshot that screen only — never photograph your ID"
+            ],
+            eligibilityTags: ["iPhone", "18+", "Students"],
+            audience: .students,
+            status: .live,
+            estimatedMinutes: 12
+        ),
+        CampusDrop(
+            id: "duolingo-streak",
+            brand: "Duolingo",
+            brandDomain: "duolingo.com",
+            brandColor: Color(hex: "58CC02"),
+            title: "Share a 7-day streak screenshot",
+            description: "Show a 7-day (or longer) learning streak in Duolingo. New or existing accounts both qualify.",
+            category: .appInstall,
+            payoutCents: 1500,
+            maxCompletions: 150,
+            remainingSlots: 119,
+            schools: [],
+            startAt: now.addingTimeInterval(-8000),
+            endAt: now.addingTimeInterval(60 * 60 * 96),
+            completionWindowSeconds: 24 * 60 * 60,
+            proofRequirements: [
+                ProofRequirement(id: "shot", label: "Streak screenshot", kind: .screenshot)
+            ],
+            instructions: [
+                "Open Duolingo",
+                "Reach at least a 7-day streak",
+                "Screenshot the streak badge or profile streak count",
+                "Submit before your claim expires"
+            ],
+            eligibilityTags: ["Any device", "Students"],
+            audience: .both,
+            status: .live,
+            estimatedMinutes: 5
+        ),
+        CampusDrop(
+            id: "liquid-death-org",
+            brand: "Liquid Death",
+            brandDomain: "liquiddeath.com",
+            brandLogoUrl: "https://liquiddeath.com/cdn/shop/files/Liquiddeath-Skull-Favicon.png",
+            brandColor: Color(hex: "0E0B0B"),
+            title: "Org Instagram story takeover brief",
+            description: "Campus orgs: post a story frame with the Liquid Death creative kit and submit the story link plus a screenshot.",
+            category: .socialPost,
+            payoutCents: 10000,
+            maxCompletions: 10,
+            remainingSlots: 6,
+            schools: ["usc", "ucla", "ucsb", "sdsu"],
+            startAt: now.addingTimeInterval(-2000),
+            endAt: now.addingTimeInterval(60 * 60 * 50),
+            completionWindowSeconds: 8 * 60 * 60,
+            proofRequirements: [
+                ProofRequirement(id: "link", label: "Story or highlight link", kind: .link),
+                ProofRequirement(id: "shot", label: "Screenshot of the posted story", kind: .screenshot)
+            ],
+            instructions: [
+                "Use the provided creative guidelines",
+                "Post from the official org account",
+                "Submit link + screenshot within the claim window"
+            ],
+            eligibilityTags: ["Campus orgs", "Instagram"],
+            audience: .orgs,
+            status: .live,
+            estimatedMinutes: 20
+        ),
+        CampusDrop(
+            id: "spotify-feedback",
+            brand: "Spotify",
+            brandDomain: "spotify.com",
+            brandColor: Color(hex: "1DB954"),
+            title: "Campus listening habits feedback",
+            description: "Tell us how you discover new music on campus. Short written answers — about five minutes.",
+            category: .survey,
+            payoutCents: 1000,
+            maxCompletions: 300,
+            remainingSlots: 244,
+            schools: ["usc", "ucla", "nyu", "umich"],
+            startAt: now.addingTimeInterval(-10000),
+            endAt: now.addingTimeInterval(60 * 60 * 60),
+            completionWindowSeconds: 45 * 60,
+            proofRequirements: [
+                ProofRequirement(id: "text", label: "Written responses", kind: .text)
+            ],
+            instructions: [
+                "Answer each prompt thoughtfully",
+                "No screenshots required",
+                "Submit before the claim timer ends"
+            ],
+            eligibilityTags: ["Students", "Any device"],
+            audience: .students,
+            status: .live,
+            estimatedMinutes: 5
+        ),
+    ]
+}
