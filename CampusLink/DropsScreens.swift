@@ -461,10 +461,9 @@ struct DropDetailScreen: View {
 
             bottomBar
         }
-        // NavigationStack keeps destination content below the status bar; paint brand
-        // into that system strip so it never reads as a white cut-off.
-        .background(drop.brandColor)
-        .background(DropDetailTopChrome(color: drop.brandColor))
+        // White canvas (incl. home indicator). Brand strip only under the status bar.
+        .background(theme.bg.ignoresSafeArea())
+        .background(DropDetailTopChrome(topColor: drop.brandColor, canvasColor: theme.bg))
         .toolbar(.hidden, for: .navigationBar)
         .toolbarBackground(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden(true)
@@ -658,37 +657,84 @@ struct DropDetailScreen: View {
     }
 }
 
-/// Paints the navigation host / window strip behind the status bar so Drop detail
-/// heroes don't leave a white cut-off above the brand wash.
-private struct DropDetailTopChrome: UIViewControllerRepresentable {
-    var color: Color
+/// Paints a status-bar-only brand strip on the key window, and keeps nav/canvas white
+/// so the home-indicator region never inherits the hero color.
+private struct DropDetailTopChrome: UIViewRepresentable {
+    var topColor: Color
+    var canvasColor: Color
 
-    func makeUIViewController(context: Context) -> UIViewController {
-        let vc = UIViewController()
-        vc.view.backgroundColor = .clear
-        vc.view.isUserInteractionEnabled = false
-        return vc
+    private static let stripTag = 9_314_201
+
+    func makeUIView(context: Context) -> ProbeView {
+        let view = ProbeView()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        return view
     }
 
-    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
-        let uiColor = UIColor(color)
-        DispatchQueue.main.async {
-            var node: UIViewController? = uiViewController
-            while let current = node {
-                current.view.backgroundColor = current === uiViewController ? .clear : uiColor
-                if let nav = current as? UINavigationController ?? current.navigationController {
-                    nav.view.backgroundColor = uiColor
+    func updateUIView(_ uiView: ProbeView, context: Context) {
+        uiView.brand = UIColor(topColor)
+        uiView.canvas = UIColor(canvasColor)
+        uiView.install()
+    }
+
+    static func dismantleUIView(_ uiView: ProbeView, coordinator: ()) {
+        uiView.removeStrip()
+    }
+
+    final class ProbeView: UIView {
+        var brand: UIColor = .clear
+        var canvas: UIColor = .white
+
+        func install() {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                if let nav = self.findNavigationController() {
+                    nav.view.backgroundColor = self.canvas
                     nav.navigationBar.isHidden = true
                     nav.navigationBar.backgroundColor = .clear
-                    nav.viewControllers.forEach {
-                        $0.view.backgroundColor = uiColor
-                        $0.edgesForExtendedLayout = .all
-                        $0.additionalSafeAreaInsets.top = 0
-                    }
+                    nav.viewControllers.forEach { $0.view.backgroundColor = self.canvas }
                 }
-                node = current.parent
+                guard let window = self.window else { return }
+                window.backgroundColor = self.canvas
+
+                let inset = max(window.safeAreaInsets.top, 47)
+                let strip: UIView
+                if let existing = window.viewWithTag(DropDetailTopChrome.stripTag) {
+                    strip = existing
+                } else {
+                    let view = UIView()
+                    view.tag = DropDetailTopChrome.stripTag
+                    view.isUserInteractionEnabled = false
+                    window.addSubview(view)
+                    strip = view
+                }
+                strip.backgroundColor = self.brand
+                strip.frame = CGRect(x: 0, y: 0, width: window.bounds.width, height: inset)
+                strip.autoresizingMask = [.flexibleWidth]
+                window.bringSubviewToFront(strip)
             }
-            uiViewController.view.window?.backgroundColor = uiColor
+        }
+
+        func removeStrip() {
+            DispatchQueue.main.async { [weak self] in
+                self?.window?.viewWithTag(DropDetailTopChrome.stripTag)?.removeFromSuperview()
+            }
+        }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if window != nil { install() } else { removeStrip() }
+        }
+
+        private func findNavigationController() -> UINavigationController? {
+            var responder: UIResponder? = self
+            while let current = responder {
+                if let nav = current as? UINavigationController { return nav }
+                if let vc = current as? UIViewController, let nav = vc.navigationController { return nav }
+                responder = current.next
+            }
+            return nil
         }
     }
 }
