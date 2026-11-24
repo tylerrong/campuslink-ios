@@ -48,6 +48,32 @@ struct RemoteUser: Hashable {
     var student: RemoteStudentProfile? = nil
     var org: RemoteOrgProfile? = nil
 
+    init(
+        id: Int,
+        email: String,
+        name: String,
+        role: String,
+        profile_type: String?,
+        registration_completed: Bool,
+        picture: String?,
+        school_id: Int? = nil,
+        school: RemoteSchool? = nil,
+        student: RemoteStudentProfile? = nil,
+        org: RemoteOrgProfile? = nil
+    ) {
+        self.id = id
+        self.email = email
+        self.name = name
+        self.role = role
+        self.profile_type = profile_type
+        self.registration_completed = registration_completed
+        self.picture = picture
+        self.school_id = school_id
+        self.school = school
+        self.student = student
+        self.org = org
+    }
+
     var isCampusProfile: Bool {
         profile_type == nil || profile_type == "student" || profile_type == "campus_org"
     }
@@ -70,6 +96,65 @@ struct RemoteUser: Hashable {
         }
         let fallback = name.trimmingCharacters(in: .whitespacesAndNewlines)
         return fallback.isEmpty ? "You" : fallback
+    }
+
+    /// Local-only mock used to skip auth in the iOS Simulator.
+    static func simulatorPreview(asOrg: Bool = false) -> RemoteUser {
+        let school = RemoteSchool(
+            id: 1,
+            name: "University of California, Los Angeles",
+            short_name: "UCLA",
+            primary_color: "#2774AE",
+            secondary_color: "#FFD100",
+            city: "Los Angeles"
+        )
+        if asOrg {
+            return RemoteUser(
+                id: -1,
+                email: "preview@ucla.edu",
+                name: "Campus Preview Org",
+                role: "user",
+                profile_type: "campus_org",
+                registration_completed: true,
+                picture: nil,
+                school_id: school.id,
+                school: school,
+                org: RemoteOrgProfile(
+                    org_name: "Campus Preview Org",
+                    org_type: "club",
+                    member_count: 120,
+                    bio: "Simulator preview profile — not a live account.",
+                    instagram_handle: "campuslink",
+                    tiktok_handle: "campuslink",
+                    website: "https://joincampuslink.com",
+                    portfolio_link: nil
+                )
+            )
+        }
+        return RemoteUser(
+            id: -1,
+            email: "preview@ucla.edu",
+            name: "Alex Preview",
+            role: "user",
+            profile_type: "student",
+            registration_completed: true,
+            picture: nil,
+            school_id: school.id,
+            school: school,
+            student: RemoteStudentProfile(
+                full_name: "Alex Preview",
+                graduation_year: 2027,
+                major: "Computer Science",
+                bio: "Simulator preview profile — not a live account.",
+                interests: "Apps & tech, Content, Startups",
+                student_type: "ambassador",
+                sport: nil,
+                instagram_handle: "alexpreview",
+                tiktok_handle: "alexpreview",
+                linkedin_url: nil,
+                portfolio_link: nil
+            )
+        )
     }
 }
 

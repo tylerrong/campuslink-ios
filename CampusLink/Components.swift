@@ -59,6 +59,52 @@ struct CLLogo: View {
     }
 }
 
+// MARK: - Brand social icons (full-color)
+enum CLBrandSocialIcon {
+    case instagram
+    case tiktok
+}
+
+struct CLBrandSocialMark: View {
+    let brand: CLBrandSocialIcon
+    var size: CGFloat = 18
+
+    var body: some View {
+        switch brand {
+        case .instagram:
+            Image("BrandInstagram")
+                .resizable()
+                .renderingMode(.original)
+                .scaledToFit()
+                .frame(width: size, height: size)
+                .accessibilityHidden(true)
+        case .tiktok:
+            // Official TikTok note with cyan / magenta chromatic offsets.
+            ZStack {
+                Hugeicons.tiktok.image()
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(Color(hex: "25F4EE"))
+                    .offset(x: -1.1, y: 0.8)
+                Hugeicons.tiktok.image()
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(Color(hex: "FE2C55"))
+                    .offset(x: 1.1, y: -0.8)
+                Hugeicons.tiktok.image()
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(Color(hex: "010101"))
+            }
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
+        }
+    }
+}
+
 // MARK: - Button
 /// Primary CTAs: red vertical gradient, rounded-rect (not capsule), label + trailing chevron.
 struct CLButton: View {
@@ -582,16 +628,6 @@ struct CLTabBar: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 56)
                 .contentShape(Rectangle())
-                .background(
-                    Group {
-                        if selected {
-                            Capsule(style: .continuous)
-                                .fill(theme.primary.opacity(0.12))
-                                .padding(.vertical, 6)
-                                .padding(.horizontal, 4)
-                        }
-                    }
-                )
         }
         .buttonStyle(.plain)
         .accessibilityLabel(item.label)

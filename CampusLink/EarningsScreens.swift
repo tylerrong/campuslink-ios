@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import Hugeicons
 
 // MARK: - Earnings
 struct EarningsScreen: View {
@@ -401,22 +402,22 @@ struct YouProfileScreen: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if !state.interestsText.isEmpty {
-                metaRow(icon: "sparkles", title: "Interests", value: state.interestsText)
+                metaRow(hugeIcon: Hugeicons.tags, title: "Interests", value: state.interestsText)
             }
             if !state.instagramHandle.isEmpty {
-                metaRow(icon: "camera", title: "Instagram", value: "@\(state.instagramHandle)")
+                metaRow(brandIcon: .instagram, title: "Instagram", value: "@\(state.instagramHandle)")
             }
             if !state.tiktokHandle.isEmpty {
-                metaRow(icon: "play.rectangle", title: "TikTok", value: "@\(state.tiktokHandle)")
+                metaRow(brandIcon: .tiktok, title: "TikTok", value: "@\(state.tiktokHandle)")
             }
             if !state.linkedinURL.isEmpty {
-                metaRow(icon: "link", title: "LinkedIn", value: state.linkedinURL)
+                metaRow(hugeIcon: Hugeicons.linkedin01, title: "LinkedIn", value: state.linkedinURL)
             }
             if !state.website.isEmpty {
-                metaRow(icon: "globe", title: "Website", value: state.website)
+                metaRow(systemIcon: "globe", title: "Website", value: state.website)
             }
             if !state.portfolioLink.isEmpty {
-                metaRow(icon: "rectangle.stack", title: "Portfolio", value: state.portfolioLink)
+                metaRow(systemIcon: "rectangle.stack", title: "Portfolio", value: state.portfolioLink)
             }
         }
         .padding(16)
@@ -424,12 +425,32 @@ struct YouProfileScreen: View {
         .stickerCard(fill: theme.card, ink: theme.ink, cornerRadius: theme.radiusLg, shadow: theme.shadowSm, borderWidth: 0)
     }
 
-    private func metaRow(icon: String, title: String, value: String) -> some View {
+    private func metaRow(
+        brandIcon: CLBrandSocialIcon? = nil,
+        hugeIcon: HugeiconsAsset? = nil,
+        systemIcon: String? = nil,
+        title: String,
+        value: String
+    ) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(theme.primary)
-                .frame(width: 22)
+            Group {
+                if let brandIcon {
+                    CLBrandSocialMark(brand: brandIcon, size: 18)
+                } else if let hugeIcon {
+                    hugeIcon.image()
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 16, height: 16)
+                        .foregroundColor(theme.primary)
+                } else if let systemIcon {
+                    Image(systemName: systemIcon)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(theme.primary)
+                }
+            }
+            .frame(width: 22, height: 18)
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.eyebrow(10))

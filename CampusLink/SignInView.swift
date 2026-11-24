@@ -95,6 +95,21 @@ struct SignInView: View {
                             Task { await google() }
                         }
                         .disabled(auth.isBusy)
+
+#if targetEnvironment(simulator)
+                        Button {
+                            haptic(.light)
+                            auth.enterSimulatorPreview()
+                        } label: {
+                            Text("Preview app (Simulator)")
+                                .font(.bodyFont(14, weight: .semibold))
+                                .foregroundColor(theme.textMuted)
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, 8)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(auth.isBusy)
+#endif
                     }
 
                     if !localError.isEmpty {

@@ -5,19 +5,40 @@ import UIKit
 @Observable
 @MainActor
 final class AuthStore {
+    static let simulatorPreviewToken = "simulator-preview"
+
     var sessionToken: String?
     var user: RemoteUser?
+#if targetEnvironment(simulator)
+    var isRestoring = false
+#else
     var isRestoring = true
+#endif
     var authMessage: String = ""
     var isBusy = false
+    /// True when browsing with the local Simulator preview account (no network session).
+    var isSimulatorPreview = false
 
     var isSignedIn: Bool { sessionToken != nil && user != nil && !(user?.isBrand ?? true) }
-    var needsWebOnboarding: Bool { user?.needsOnboarding == true }
+    var needsWebOnboarding: Bool {
+        if isSimulatorPreview { return false }
+        return user?.needsOnboarding == true
+    }
 
     private var webAuthSession: ASWebAuthenticationSession?
 
     init() {
+#if targetEnvironment(simulator)
+        // Simulator opens straight into a local preview account so UI can be reviewed
+        // without magic-link/Google. Device builds always restore a real session.
+        // Tap Log out → “Preview app (Simulator)” (or sign in for real) to change.
+        isSimulatorPreview = true
+        sessionToken = Self.simulatorPreviewToken
+        user = .simulatorPreview()
+        isRestoring = false
+#else
         Task { await restoreSession() }
+#endif
     }
 
     func restoreSession() async {
@@ -26,18 +47,42 @@ final class AuthStore {
         guard let token = KeychainStore.loadToken() else {
             sessionToken = nil
             user = nil
+            isSimulatorPreview = false
+            return
+        }
+        if token == Self.simulatorPreviewToken || token.count < 20 {
+            // Never persist simulator preview across launches via Keychain.
+            KeychainStore.clearToken()
+            sessionToken = nil
+            user = nil
+            isSimulatorPreview = false
             return
         }
         do {
             let me = try await APIClient.shared.fetchMe(token: token)
             sessionToken = token
             user = me
+            isSimulatorPreview = false
         } catch {
             KeychainStore.clearToken()
             sessionToken = nil
             user = nil
+            isSimulatorPreview = false
         }
     }
+
+#if targetEnvironment(simulator)
+    /// Skip magic/Google auth so UI can be reviewed in Simulator.
+    func enterSimulatorPreview(asOrg: Bool = false) {
+        KeychainStore.clearToken()
+        isSimulatorPreview = true
+        sessionToken = Self.simulatorPreviewToken
+        user = .simulatorPreview(asOrg: asOrg)
+        authMessage = ""
+        isBusy = false
+        isRestoring = false
+    }
+#endif
 
     func requestMagicLink(email: String) async throws {
         isBusy = true
@@ -163,6 +208,7 @@ final class AuthStore {
         KeychainStore.clearToken()
         sessionToken = nil
         user = nil
+        isSimulatorPreview = false
         authMessage = ""
         isBusy = false
     }

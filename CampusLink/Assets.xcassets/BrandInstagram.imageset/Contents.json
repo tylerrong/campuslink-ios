@@ -1,0 +1,9 @@
+{
+  "images" : [
+    { "filename" : "BrandInstagram.png", "idiom" : "universal", "scale" : "1x" },
+    { "filename" : "BrandInstagram@2x.png", "idiom" : "universal", "scale" : "2x" },
+    { "filename" : "BrandInstagram@3x.png", "idiom" : "universal", "scale" : "3x" }
+  ],
+  "info" : { "author" : "xcode", "version" : 1 },
+  "properties" : { "template-rendering-intent" : "original" }
+}

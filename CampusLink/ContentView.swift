@@ -8,6 +8,10 @@ struct ContentView: View {
 
     var body: some View {
         Group {
+#if targetEnvironment(simulator)
+            // Simulator always boots into the main shell with a local preview profile.
+            MainApp(state: appState, auth: auth, theme: theme)
+#else
             if auth.isRestoring {
                 ZStack {
                     theme.bg.ignoresSafeArea()
@@ -20,6 +24,7 @@ struct ContentView: View {
             } else {
                 MainApp(state: appState, auth: auth, theme: theme)
             }
+#endif
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
@@ -29,7 +34,9 @@ struct ContentView: View {
         }
         .onChange(of: auth.sessionToken) { _, token in
             appState.syncSession(token: token, user: auth.user)
-            if token != nil {
+            if token == AuthStore.simulatorPreviewToken {
+                appState.loadSimulatorPreviewCatalog()
+            } else if token != nil {
                 Task {
                     await appState.refreshOpportunities()
                     await appState.refreshApplied()
@@ -41,6 +48,15 @@ struct ContentView: View {
         .onChange(of: auth.user?.id) { _, _ in
             appState.syncSession(token: auth.sessionToken, user: auth.user)
         }
+        .onAppear {
+#if targetEnvironment(simulator)
+            if !auth.isSimulatorPreview {
+                auth.enterSimulatorPreview()
+            }
+            appState.syncSession(token: auth.sessionToken, user: auth.user)
+            appState.loadSimulatorPreviewCatalog()
+#endif
+        }
         .task(id: auth.isSignedIn) {
             guard auth.isSignedIn else { return }
             appState.onSessionExpired = {
@@ -48,6 +64,10 @@ struct ContentView: View {
                 appState.logOut()
             }
             appState.syncSession(token: auth.sessionToken, user: auth.user)
+            if auth.isSimulatorPreview {
+                appState.loadSimulatorPreviewCatalog()
+                return
+            }
             await appState.refreshProfile()
             await appState.refreshOpportunities()
             await appState.refreshApplied()

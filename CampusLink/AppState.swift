@@ -246,9 +246,19 @@ class AppState {
             .filter { !$0.isEmpty }
     }
 
+    /// Seed local sample drops when browsing without a real session (Simulator preview).
+    @MainActor
+    func loadSimulatorPreviewCatalog() {
+        if drops.isEmpty {
+            drops = makeSampleDrops()
+        }
+        feedError = ""
+        isLoadingFeed = false
+    }
+
     @MainActor
     func refreshProfile() async {
-        guard let token = sessionToken else { return }
+        guard let token = sessionToken, token != AuthStore.simulatorPreviewToken else { return }
         do {
             let me = try await APIClient.shared.fetchMe(token: token)
             remoteUser = me
@@ -263,6 +273,10 @@ class AppState {
     @MainActor
     func refreshOpportunities() async {
         guard let token = sessionToken else { return }
+        if token == AuthStore.simulatorPreviewToken {
+            loadSimulatorPreviewCatalog()
+            return
+        }
         isLoadingFeed = true
         feedError = ""
         defer { isLoadingFeed = false }
@@ -284,7 +298,7 @@ class AppState {
 
     @MainActor
     func refreshApplied() async {
-        guard let token = sessionToken else { return }
+        guard let token = sessionToken, token != AuthStore.simulatorPreviewToken else { return }
         do {
             let remote = try await APIClient.shared.fetchApplied(token: token)
             appliedOpportunities = remote.map { CampusDrop.fromOpportunity($0) }
