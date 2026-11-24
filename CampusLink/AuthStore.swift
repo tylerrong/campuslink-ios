@@ -49,14 +49,15 @@ final class AuthStore {
         isBusy = true
         defer { isBusy = false }
         let result = try await APIClient.shared.exchangeMagicToken(t)
-        persist(token: result.token, user: result.user)
+        // Auth exchange returns a thin user — load full campus profile from /me.
+        await persist(token: result.token, user: result.user, refreshProfile: true)
     }
 
     func completeSessionToken(_ token: String) async throws {
         isBusy = true
         defer { isBusy = false }
         let me = try await APIClient.shared.fetchMe(token: token)
-        persist(token: token, user: me)
+        await persist(token: token, user: me, refreshProfile: false)
     }
 
     func signInWithGoogle() async throws {
@@ -166,7 +167,7 @@ final class AuthStore {
         isBusy = false
     }
 
-    private func persist(token: String, user: RemoteUser) {
+    private func persist(token: String, user: RemoteUser, refreshProfile: Bool = false) async {
         if user.isBrand {
             KeychainStore.clearToken()
             sessionToken = nil
@@ -176,7 +177,11 @@ final class AuthStore {
         }
         KeychainStore.saveToken(token)
         sessionToken = token
-        self.user = user
+        if refreshProfile, let me = try? await APIClient.shared.fetchMe(token: token) {
+            self.user = me
+        } else {
+            self.user = user
+        }
         authMessage = ""
     }
 }

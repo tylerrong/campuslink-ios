@@ -17,12 +17,78 @@ enum ProfileKind: String, CaseIterable, Identifiable {
 }
 
 enum OrgType: String, CaseIterable, Identifiable {
-    case greek = "Greek life"
-    case club = "Club"
-    case team = "Team"
-    case creator = "Creator collective"
+    case fraternity
+    case sorority
+    case club
+    case team
+    case officialUniversity = "official_university"
+    case independent
+    case other
+    /// Legacy local onboarding values (still accepted when decoding UI state).
+    case greek
+    case creator
 
     var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .fraternity: return "Fraternity"
+        case .sorority: return "Sorority"
+        case .club: return "Club"
+        case .team: return "Team"
+        case .officialUniversity: return "Official university"
+        case .independent: return "Independent"
+        case .other: return "Other"
+        case .greek: return "Greek life"
+        case .creator: return "Creator collective"
+        }
+    }
+
+    static func fromWeb(_ raw: String?) -> OrgType {
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !raw.isEmpty else { return .club }
+        switch raw {
+        case "fraternity": return .fraternity
+        case "sorority": return .sorority
+        case "club": return .club
+        case "team": return .team
+        case "official_university": return .officialUniversity
+        case "independent": return .independent
+        case "corporate", "other": return .other
+        case "greek", "greek life": return .greek
+        case "creator", "creator collective": return .creator
+        default: return .other
+        }
+    }
+}
+
+extension School {
+    static func fromRemote(_ remote: RemoteSchool) -> School {
+        let slug = remote.short_name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let sample = sampleSchools.first { $0.id == slug }
+        let hex = remote.primary_color?.trimmingCharacters(in: CharacterSet(charactersIn: "#")) ?? ""
+        let color: Color = {
+            if !hex.isEmpty { return Color(hex: hex) }
+            return sample?.color ?? Color(hex: "111114")
+        }()
+        return School(
+            id: slug.isEmpty ? String(remote.id) : slug,
+            name: remote.short_name.isEmpty ? remote.name : remote.short_name,
+            sub: remote.name,
+            color: color,
+            students: remote.city ?? "",
+            logoUrl: sample?.logoUrl
+        )
+    }
+
+    static let placeholder = School(
+        id: "",
+        name: "Your school",
+        sub: "Finish your profile on CampusLink",
+        color: Color(hex: "6E6E76"),
+        students: "",
+        logoUrl: nil
+    )
 }
 
 enum VerificationStatus: String {

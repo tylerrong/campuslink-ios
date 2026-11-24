@@ -591,8 +591,8 @@ struct OnOrgDetailsView: View {
                         .padding(.top, 22)
                         .padding(.bottom, 10)
                     FlowLayout(spacing: 8) {
-                        ForEach(OrgType.allCases) { t in
-                            CLChip(label: t.rawValue, selected: orgType == t, theme: theme) { orgType = t }
+                        ForEach([OrgType.fraternity, .sorority, .club, .team, .other]) { t in
+                            CLChip(label: t.label, selected: orgType == t, theme: theme) { orgType = t }
                         }
                     }
 

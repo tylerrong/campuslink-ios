@@ -1,6 +1,40 @@
 import Foundation
 import SwiftUI
 
+struct RemoteSchool: Codable, Hashable {
+    let id: Int
+    let name: String
+    let short_name: String
+    let primary_color: String?
+    let secondary_color: String?
+    let city: String?
+}
+
+struct RemoteStudentProfile: Codable, Hashable {
+    let full_name: String?
+    let graduation_year: Int?
+    let major: String?
+    let bio: String?
+    let interests: String?
+    let student_type: String?
+    let sport: String?
+    let instagram_handle: String?
+    let tiktok_handle: String?
+    let linkedin_url: String?
+    let portfolio_link: String?
+}
+
+struct RemoteOrgProfile: Codable, Hashable {
+    let org_name: String?
+    let org_type: String?
+    let member_count: Int?
+    let bio: String?
+    let instagram_handle: String?
+    let tiktok_handle: String?
+    let website: String?
+    let portfolio_link: String?
+}
+
 struct RemoteUser: Hashable {
     let id: Int
     let email: String
@@ -10,6 +44,9 @@ struct RemoteUser: Hashable {
     let registration_completed: Bool
     let picture: String?
     var school_id: Int? = nil
+    var school: RemoteSchool? = nil
+    var student: RemoteStudentProfile? = nil
+    var org: RemoteOrgProfile? = nil
 
     var isCampusProfile: Bool {
         profile_type == nil || profile_type == "student" || profile_type == "campus_org"
@@ -22,11 +59,24 @@ struct RemoteUser: Hashable {
         if role == "admin" { return false }
         return !registration_completed || profile_type == nil
     }
+
+    var displayFullName: String {
+        if profile_type == "campus_org" {
+            let orgName = org?.org_name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !orgName.isEmpty { return orgName }
+        } else {
+            let full = student?.full_name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !full.isEmpty { return full }
+        }
+        let fallback = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return fallback.isEmpty ? "You" : fallback
+    }
 }
 
 extension RemoteUser: Codable {
     enum CodingKeys: String, CodingKey {
         case id, email, name, role, profile_type, registration_completed, picture, school_id
+        case school, student, org
     }
 
     init(from decoder: Decoder) throws {
@@ -38,6 +88,9 @@ extension RemoteUser: Codable {
         profile_type = try c.decodeIfPresent(String.self, forKey: .profile_type)
         picture = try c.decodeIfPresent(String.self, forKey: .picture)
         school_id = try c.decodeIfPresent(Int.self, forKey: .school_id)
+        school = try c.decodeIfPresent(RemoteSchool.self, forKey: .school)
+        student = try c.decodeIfPresent(RemoteStudentProfile.self, forKey: .student)
+        org = try c.decodeIfPresent(RemoteOrgProfile.self, forKey: .org)
         // Accept bool or 0/1 from older JWTs / D1 coercion
         if let b = try? c.decode(Bool.self, forKey: .registration_completed) {
             registration_completed = b

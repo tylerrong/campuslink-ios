@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     @State private var appState = AppState()
@@ -47,6 +48,7 @@ struct ContentView: View {
                 appState.logOut()
             }
             appState.syncSession(token: auth.sessionToken, user: auth.user)
+            await appState.refreshProfile()
             await appState.refreshOpportunities()
             await appState.refreshApplied()
         }
@@ -112,6 +114,24 @@ struct MainApp: View {
             }
         }
         .animation(.easeOut(duration: 0.22), value: state.toastMessage.isEmpty)
+        .onAppear { Self.removeOrphanStatusBarStrip() }
+        .onChange(of: state.navigationPath.count) { _, _ in
+            // Detail used to paint a key-window strip that could stick after pop.
+            if state.navigationPath.isEmpty {
+                Self.removeOrphanStatusBarStrip()
+            }
+        }
+    }
+
+    /// Clears a leaked status-bar overlay from an earlier DropDetail window chrome.
+    private static let orphanStatusStripTag = 9_314_201
+    private static func removeOrphanStatusBarStrip() {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        for scene in scenes {
+            for window in scene.windows {
+                window.viewWithTag(orphanStatusStripTag)?.removeFromSuperview()
+            }
+        }
     }
 
     /// Keep all tab roots alive so switches don't rebuild heavy screens / AsyncImages.

@@ -34,13 +34,28 @@ class AppState {
     /// 0=splash 1=role 2=school 3=verify 4=interests/org 5=handle 6=done
     var onboardingStep: Int = 0
     var profileKind: ProfileKind = .student
-    var schoolId: String = "usc"
-    var year: String = "Junior"
+    /// School short_name slug from web (empty until /me syncs).
+    var schoolId: String = ""
+    var schoolNumericId: Int? = nil
+    var remoteSchool: School? = nil
+    var year: String = ""
+    var major: String = ""
+    var bio: String = ""
     var interests: [String] = []
-    var handle: String = "maya"
+    var interestsText: String = ""
+    var handle: String = ""
+    var fullName: String = ""
     var orgName: String = ""
     var orgType: OrgType = .club
-    var orgMemberCount: String = "80"
+    var orgMemberCount: String = ""
+    var instagramHandle: String = ""
+    var tiktokHandle: String = ""
+    var linkedinURL: String = ""
+    var portfolioLink: String = ""
+    var website: String = ""
+    var studentType: String = ""
+    var sport: String = ""
+    var pictureURL: String? = nil
 
     // MARK: Profile / settings
     var avatarImageData: Data? = nil
@@ -109,18 +124,139 @@ class AppState {
         claims = []
         submissions = []
         feedError = ""
+        clearProfileFields()
+    }
+
+    private func clearProfileFields() {
+        schoolId = ""
+        schoolNumericId = nil
+        remoteSchool = nil
+        year = ""
+        major = ""
+        bio = ""
+        interests = []
+        interestsText = ""
+        handle = ""
+        fullName = ""
+        orgName = ""
+        orgType = .club
+        orgMemberCount = ""
+        instagramHandle = ""
+        tiktokHandle = ""
+        linkedinURL = ""
+        portfolioLink = ""
+        website = ""
+        studentType = ""
+        sport = ""
+        pictureURL = nil
+        eduEmail = ""
+        verificationStatus = .unverified
+        avatarImageData = nil
     }
 
     func syncSession(token: String?, user: RemoteUser?) {
         sessionToken = token
         remoteUser = user
-        if let user {
-            profileKind = user.profile_type == "campus_org" ? .org : .student
-            if let name = Optional(user.name), !name.isEmpty {
-                if profileKind == .org { orgName = name } else { handle = name }
+        guard let user else {
+            clearProfileFields()
+            return
+        }
+        applyRemoteProfile(user)
+    }
+
+    /// Map joincampuslink.com /me (and auth session) into local profile fields.
+    func applyRemoteProfile(_ user: RemoteUser) {
+        profileKind = user.profile_type == "campus_org" ? .org : .student
+        eduEmail = user.email
+        verificationStatus = user.registration_completed ? .verified : .unverified
+        pictureURL = user.picture
+
+        schoolNumericId = user.school_id ?? user.school?.id
+        if let remote = user.school {
+            let mapped = School.fromRemote(remote)
+            remoteSchool = mapped
+            schoolId = mapped.id
+        } else {
+            remoteSchool = nil
+            schoolId = ""
+        }
+
+        if profileKind == .org {
+            let org = user.org
+            orgName = org?.org_name?.trimmingCharacters(in: .whitespacesAndNewlines)
+                ?? (user.name.isEmpty ? "" : user.name)
+            orgType = OrgType.fromWeb(org?.org_type)
+            if let count = org?.member_count {
+                orgMemberCount = String(count)
+            } else if orgMemberCount.isEmpty {
+                orgMemberCount = ""
             }
-            eduEmail = user.email
-            verificationStatus = user.registration_completed ? .verified : .unverified
+            bio = org?.bio ?? ""
+            instagramHandle = Self.normalizeHandle(org?.instagram_handle)
+            tiktokHandle = Self.normalizeHandle(org?.tiktok_handle)
+            website = org?.website?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            portfolioLink = org?.portfolio_link?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            linkedinURL = ""
+            year = ""
+            major = ""
+            interestsText = ""
+            interests = []
+            studentType = ""
+            sport = ""
+            fullName = orgName
+            handle = orgName
+        } else {
+            let student = user.student
+            fullName = student?.full_name?.trimmingCharacters(in: .whitespacesAndNewlines)
+                ?? (user.name.isEmpty ? "" : user.name)
+            handle = fullName
+            if let gy = student?.graduation_year {
+                year = String(gy)
+            } else {
+                year = ""
+            }
+            major = student?.major?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            bio = student?.bio ?? ""
+            interestsText = student?.interests?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            interests = Self.parseInterests(interestsText)
+            studentType = student?.student_type ?? ""
+            sport = student?.sport ?? ""
+            instagramHandle = Self.normalizeHandle(student?.instagram_handle)
+            tiktokHandle = Self.normalizeHandle(student?.tiktok_handle)
+            linkedinURL = student?.linkedin_url?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            portfolioLink = student?.portfolio_link?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            website = ""
+            orgName = ""
+            orgMemberCount = ""
+        }
+    }
+
+    private static func normalizeHandle(_ raw: String?) -> String {
+        guard var value = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+            return ""
+        }
+        if value.hasPrefix("@") { value.removeFirst() }
+        return value
+    }
+
+    private static func parseInterests(_ text: String) -> [String] {
+        text
+            .split { $0 == "," || $0 == ";" || $0 == "\n" }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    @MainActor
+    func refreshProfile() async {
+        guard let token = sessionToken else { return }
+        do {
+            let me = try await APIClient.shared.fetchMe(token: token)
+            remoteUser = me
+            applyRemoteProfile(me)
+        } catch {
+            if isUnauthorized(error) {
+                handleSessionExpired()
+            }
         }
     }
 
@@ -206,12 +342,33 @@ class AppState {
     var currentRoute: AppRoute? { navigationPath.last }
     var detailId: String { currentRoute?.id ?? "" }
 
-    var school: School { sampleSchools.first { $0.id == schoolId } ?? sampleSchools[0] }
+    var school: School {
+        if let remoteSchool { return remoteSchool }
+        if !schoolId.isEmpty, let match = sampleSchools.first(where: { $0.id == schoolId }) {
+            return match
+        }
+        return .placeholder
+    }
 
     var displayName: String {
-        profileKind == .org
-            ? (orgName.isEmpty ? "Your org" : orgName)
-            : (handle.isEmpty ? "You" : "@\(handle)")
+        if profileKind == .org {
+            return orgName.isEmpty ? "Your org" : orgName
+        }
+        if !fullName.isEmpty { return fullName }
+        if !handle.isEmpty { return handle }
+        return "You"
+    }
+
+    var profileSubtitle: String {
+        if profileKind == .org {
+            let members = orgMemberCount.isEmpty ? nil : "\(orgMemberCount) members"
+            return [orgType.label, members].compactMap { $0 }.joined(separator: " · ")
+        }
+        var parts: [String] = []
+        if !year.isEmpty { parts.append("Class of \(year)") }
+        if !major.isEmpty { parts.append(major) }
+        if parts.isEmpty { parts.append("Student") }
+        return parts.joined(separator: " · ")
     }
 
     var unreadNotificationCount: Int { notifications.filter { !$0.read }.count }

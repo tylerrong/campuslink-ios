@@ -475,9 +475,18 @@ struct DropDetailScreen: View {
 
             bottomBar
         }
-        // White canvas (incl. home indicator). Brand strip only under the status bar.
-        .background(theme.bg.ignoresSafeArea())
-        .background(DropDetailTopChrome(topColor: drop.brandColor, canvasColor: theme.bg))
+        // Brand under the status bar only while this screen is visible — no window overlay
+        // (the old key-window strip leaked onto every tab after leaving detail).
+        .background {
+            VStack(spacing: 0) {
+                drop.brandColor
+                    .frame(height: topInset)
+                    .frame(maxWidth: .infinity)
+                theme.bg
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .ignoresSafeArea()
+        }
         .toolbar(.hidden, for: .navigationBar)
         .toolbarBackground(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden(true)
@@ -685,84 +694,3 @@ struct DropDetailScreen: View {
     }
 }
 
-/// Paints a status-bar-only brand strip on the key window, and keeps nav/canvas white
-/// so the home-indicator region never inherits the hero color.
-private struct DropDetailTopChrome: UIViewRepresentable {
-    var topColor: Color
-    var canvasColor: Color
-
-    private static let stripTag = 9_314_201
-
-    func makeUIView(context: Context) -> ProbeView {
-        let view = ProbeView()
-        view.isUserInteractionEnabled = false
-        view.backgroundColor = .clear
-        return view
-    }
-
-    func updateUIView(_ uiView: ProbeView, context: Context) {
-        uiView.brand = UIColor(topColor)
-        uiView.canvas = UIColor(canvasColor)
-        uiView.install()
-    }
-
-    static func dismantleUIView(_ uiView: ProbeView, coordinator: ()) {
-        uiView.removeStrip()
-    }
-
-    final class ProbeView: UIView {
-        var brand: UIColor = .clear
-        var canvas: UIColor = .white
-
-        func install() {
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                if let nav = self.findNavigationController() {
-                    nav.view.backgroundColor = self.canvas
-                    nav.navigationBar.isHidden = true
-                    nav.navigationBar.backgroundColor = .clear
-                    nav.viewControllers.forEach { $0.view.backgroundColor = self.canvas }
-                }
-                guard let window = self.window else { return }
-                window.backgroundColor = self.canvas
-
-                let inset = max(window.safeAreaInsets.top, 47)
-                let strip: UIView
-                if let existing = window.viewWithTag(DropDetailTopChrome.stripTag) {
-                    strip = existing
-                } else {
-                    let view = UIView()
-                    view.tag = DropDetailTopChrome.stripTag
-                    view.isUserInteractionEnabled = false
-                    window.addSubview(view)
-                    strip = view
-                }
-                strip.backgroundColor = self.brand
-                strip.frame = CGRect(x: 0, y: 0, width: window.bounds.width, height: inset)
-                strip.autoresizingMask = [.flexibleWidth]
-                window.bringSubviewToFront(strip)
-            }
-        }
-
-        func removeStrip() {
-            DispatchQueue.main.async { [weak self] in
-                self?.window?.viewWithTag(DropDetailTopChrome.stripTag)?.removeFromSuperview()
-            }
-        }
-
-        override func didMoveToWindow() {
-            super.didMoveToWindow()
-            if window != nil { install() } else { removeStrip() }
-        }
-
-        private func findNavigationController() -> UINavigationController? {
-            var responder: UIResponder? = self
-            while let current = responder {
-                if let nav = current as? UINavigationController { return nav }
-                if let vc = current as? UIViewController, let nav = vc.navigationController { return nav }
-                responder = current.next
-            }
-            return nil
-        }
-    }
-}

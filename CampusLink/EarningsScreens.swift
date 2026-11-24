@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Earnings
 struct EarningsScreen: View {
@@ -219,7 +220,7 @@ struct YouProfileScreen: View {
                 HStack(spacing: 12) {
                     CLColorStatCard(
                         title: "School",
-                        value: state.school.name,
+                        value: state.schoolId.isEmpty ? "—" : state.school.name,
                         detail: verificationLabel,
                         icon: "checkmark.seal.fill",
                         fill: theme.accentBlue,
@@ -236,6 +237,12 @@ struct YouProfileScreen: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 18)
+
+                if hasSocialOrLinks {
+                    profileMetaCard
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 18)
+                }
 
                 VStack(spacing: 0) {
                     settingsRow(icon: "checkmark.seal", title: "School verification", value: verificationLabel) {
@@ -296,6 +303,9 @@ struct YouProfileScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.bg.ignoresSafeArea())
+        .task(id: auth.sessionToken) {
+            await state.refreshProfile()
+        }
     }
 
     private var verificationLabel: String {
@@ -308,24 +318,23 @@ struct YouProfileScreen: View {
 
     private var profileHeader: some View {
         HStack(spacing: 16) {
-            Text(avatarLetter)
-                .font(.display(28, weight: .bold))
-                .foregroundColor(.white)
-                .frame(width: 72, height: 72)
-                .background(Circle().fill(theme.primary))
+            avatarView
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(state.displayName)
                     .font(.display(22, weight: .bold))
                     .foregroundColor(theme.text)
-                Text(roleLine)
+                Text(state.profileSubtitle)
                     .font(.bodyFont(13, weight: .medium))
                     .foregroundColor(theme.textMuted)
-                HStack(spacing: 6) {
-                    SchoolLogo(school: state.school, size: 18, cornerRadius: 5, showBorder: false)
-                    Text(state.school.name)
-                        .font(.bodyFont(13))
-                        .foregroundColor(theme.textMuted)
+                if !state.schoolId.isEmpty {
+                    HStack(spacing: 6) {
+                        SchoolLogo(school: state.school, size: 18, cornerRadius: 5, showBorder: false)
+                        Text(state.school.sub.isEmpty ? state.school.name : state.school.sub)
+                            .font(.bodyFont(13))
+                            .foregroundColor(theme.textMuted)
+                            .lineLimit(1)
+                    }
                 }
             }
             Spacer(minLength: 8)
@@ -340,18 +349,99 @@ struct YouProfileScreen: View {
         .accessibilityAddTraits(.isButton)
     }
 
-    private var avatarLetter: String {
-        if state.profileKind == .org {
-            return String((state.orgName.first ?? "O")).uppercased()
+    @ViewBuilder
+    private var avatarView: some View {
+        if let urlStr = state.pictureURL, let url = URL(string: urlStr) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 72, height: 72)
+                        .clipShape(Circle())
+                default:
+                    letterAvatar
+                }
+            }
+        } else {
+            letterAvatar
         }
-        return String((state.handle.first ?? "?")).uppercased()
     }
 
-    private var roleLine: String {
-        if state.profileKind == .org {
-            return "\(state.orgType.rawValue) · Campus org"
+    private var letterAvatar: some View {
+        Text(avatarLetter)
+            .font(.display(28, weight: .bold))
+            .foregroundColor(.white)
+            .frame(width: 72, height: 72)
+            .background(Circle().fill(theme.primary))
+    }
+
+    private var avatarLetter: String {
+        let source = state.displayName
+        return String((source.first ?? "?")).uppercased()
+    }
+
+    private var hasSocialOrLinks: Bool {
+        !state.instagramHandle.isEmpty
+            || !state.tiktokHandle.isEmpty
+            || !state.linkedinURL.isEmpty
+            || !state.website.isEmpty
+            || !state.portfolioLink.isEmpty
+            || !state.bio.isEmpty
+            || !state.interestsText.isEmpty
+    }
+
+    private var profileMetaCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if !state.bio.isEmpty {
+                Text(state.bio)
+                    .font(.bodyFont(14))
+                    .foregroundColor(theme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !state.interestsText.isEmpty {
+                metaRow(icon: "sparkles", title: "Interests", value: state.interestsText)
+            }
+            if !state.instagramHandle.isEmpty {
+                metaRow(icon: "camera", title: "Instagram", value: "@\(state.instagramHandle)")
+            }
+            if !state.tiktokHandle.isEmpty {
+                metaRow(icon: "play.rectangle", title: "TikTok", value: "@\(state.tiktokHandle)")
+            }
+            if !state.linkedinURL.isEmpty {
+                metaRow(icon: "link", title: "LinkedIn", value: state.linkedinURL)
+            }
+            if !state.website.isEmpty {
+                metaRow(icon: "globe", title: "Website", value: state.website)
+            }
+            if !state.portfolioLink.isEmpty {
+                metaRow(icon: "rectangle.stack", title: "Portfolio", value: state.portfolioLink)
+            }
         }
-        return "\(state.year) · Student"
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .stickerCard(fill: theme.card, ink: theme.ink, cornerRadius: theme.radiusLg, shadow: theme.shadowSm, borderWidth: 0)
+    }
+
+    private func metaRow(icon: String, title: String, value: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(theme.primary)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.eyebrow(10))
+                    .textCase(.uppercase)
+                    .foregroundColor(theme.textFaint)
+                Text(value)
+                    .font(.bodyFont(14, weight: .medium))
+                    .foregroundColor(theme.text)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+        }
     }
 
     private var divider: some View {
@@ -389,27 +479,65 @@ struct EditProfileScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            CLTopBar(title: "Edit profile", onBack: { state.pop() }, theme: theme)
+            CLTopBar(title: "Profile", onBack: { state.pop() }, theme: theme)
             CLScrollView(theme: theme) {
                 VStack(alignment: .leading, spacing: 18) {
+                    Text("Synced from your CampusLink web profile. Update details at joincampuslink.com.")
+                        .font(.bodyFont(14))
+                        .foregroundColor(theme.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+
                     if state.profileKind == .student {
-                        labeledField("Handle") {
-                            TextField("handle", text: $state.handle)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
+                        readOnlyField("Name", value: state.fullName)
+                        readOnlyField("School", value: state.school.sub.isEmpty ? state.school.name : state.school.sub)
+                        readOnlyField("Graduation year", value: state.year)
+                        readOnlyField("Major", value: state.major)
+                        if !state.studentType.isEmpty {
+                            readOnlyField("Student type", value: state.studentType.capitalized)
                         }
-                        labeledField("Year") {
-                            TextField("Year", text: $state.year)
+                        if !state.sport.isEmpty {
+                            readOnlyField("Sport", value: state.sport)
+                        }
+                        readOnlyField("Instagram", value: state.instagramHandle.isEmpty ? "" : "@\(state.instagramHandle)")
+                        readOnlyField("TikTok", value: state.tiktokHandle.isEmpty ? "" : "@\(state.tiktokHandle)")
+                        readOnlyField("LinkedIn", value: state.linkedinURL)
+                        readOnlyField("Portfolio", value: state.portfolioLink)
+                        readOnlyField("Interests", value: state.interestsText)
+                        if !state.bio.isEmpty {
+                            readOnlyMultiline("Bio", value: state.bio)
                         }
                     } else {
-                        labeledField("Org name") {
-                            TextField("Org name", text: $state.orgName)
-                        }
-                        labeledField("Members") {
-                            TextField("Count", text: $state.orgMemberCount)
-                                .keyboardType(.numberPad)
+                        readOnlyField("Org name", value: state.orgName)
+                        readOnlyField("Type", value: state.orgType.label)
+                        readOnlyField("Members", value: state.orgMemberCount)
+                        readOnlyField("School", value: state.school.sub.isEmpty ? state.school.name : state.school.sub)
+                        readOnlyField("Instagram", value: state.instagramHandle.isEmpty ? "" : "@\(state.instagramHandle)")
+                        readOnlyField("TikTok", value: state.tiktokHandle.isEmpty ? "" : "@\(state.tiktokHandle)")
+                        readOnlyField("Website", value: state.website)
+                        readOnlyField("Portfolio", value: state.portfolioLink)
+                        if !state.bio.isEmpty {
+                            readOnlyMultiline("Bio", value: state.bio)
                         }
                     }
+
+                    readOnlyField("Email", value: state.eduEmail)
+
+                    CLButton(
+                        label: "Edit on CampusLink",
+                        kind: .primary,
+                        size: .lg,
+                        icon: "arrow.up.right",
+                        showsChevron: false,
+                        full: true,
+                        theme: theme
+                    ) {
+                        haptic(.light)
+                        if let url = URL(string: "\(AppState.webBaseURL)/profile") {
+                            Task { await UIApplication.shared.open(url) }
+                        }
+                    }
+                    .padding(.top, 8)
+
                     Color.clear.frame(height: 40)
                 }
                 .padding(.horizontal, 20)
@@ -419,16 +547,34 @@ struct EditProfileScreen: View {
         .navigationBarBackButtonHidden(true)
     }
 
-    private func labeledField<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+    private func readOnlyField(_ title: String, value: String) -> some View {
+        let display = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.eyebrow(11))
+                .textCase(.uppercase)
+                .foregroundColor(theme.textMuted)
+            Text(display.isEmpty ? "—" : display)
+                .font(.bodyFont(16))
+                .foregroundColor(display.isEmpty ? theme.textFaint : theme.text)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .frame(minHeight: 50)
+                .stickerOutline(fill: theme.surface, ink: theme.ink, cornerRadius: 12, borderWidth: theme.borderThinWidth)
+        }
+    }
+
+    private func readOnlyMultiline(_ title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.eyebrow(11))
                 .textCase(.uppercase)
                 .foregroundColor(theme.textMuted)
-            content()
+            Text(value)
                 .font(.bodyFont(16))
-                .padding(.horizontal, 14)
-                .frame(height: 50)
+                .foregroundColor(theme.text)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
                 .stickerOutline(fill: theme.surface, ink: theme.ink, cornerRadius: 12, borderWidth: theme.borderThinWidth)
         }
     }
