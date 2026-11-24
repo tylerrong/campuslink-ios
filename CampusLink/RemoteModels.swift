@@ -151,7 +151,7 @@ struct RemoteUser: Hashable {
                 sport: nil,
                 instagram_handle: "alexpreview",
                 tiktok_handle: "alexpreview",
-                linkedin_url: nil,
+                linkedin_url: "https://linkedin.com/in/alexpreview",
                 portfolio_link: nil
             )
         )

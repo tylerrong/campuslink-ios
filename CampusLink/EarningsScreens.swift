@@ -411,7 +411,7 @@ struct YouProfileScreen: View {
                 metaRow(brandIcon: .tiktok, title: "TikTok", value: "@\(state.tiktokHandle)")
             }
             if !state.linkedinURL.isEmpty {
-                metaRow(hugeIcon: Hugeicons.linkedin01, title: "LinkedIn", value: state.linkedinURL)
+                metaRow(brandIcon: .linkedin, title: "LinkedIn", value: state.linkedinURL)
             }
             if !state.website.isEmpty {
                 metaRow(systemIcon: "globe", title: "Website", value: state.website)

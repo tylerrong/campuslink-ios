@@ -63,6 +63,7 @@ struct CLLogo: View {
 enum CLBrandSocialIcon {
     case instagram
     case tiktok
+    case linkedin
 }
 
 struct CLBrandSocialMark: View {
@@ -70,38 +71,60 @@ struct CLBrandSocialMark: View {
     var size: CGFloat = 18
 
     var body: some View {
-        switch brand {
-        case .instagram:
-            Image("BrandInstagram")
-                .resizable()
-                .renderingMode(.original)
-                .scaledToFit()
-                .frame(width: size, height: size)
-                .accessibilityHidden(true)
-        case .tiktok:
-            // Official TikTok note with cyan / magenta chromatic offsets.
-            ZStack {
-                Hugeicons.tiktok.image()
+        Group {
+            switch brand {
+            case .instagram:
+                // Official Instagram glyph filled with brand gradient.
+                LinearGradient(
+                    colors: [
+                        Color(hex: "833AB4"),
+                        Color(hex: "C13584"),
+                        Color(hex: "E1306C"),
+                        Color(hex: "FD1D1D"),
+                        Color(hex: "F77737"),
+                        Color(hex: "FCAF45")
+                    ],
+                    startPoint: .topTrailing,
+                    endPoint: .bottomLeading
+                )
+                .mask(
+                    Hugeicons.instagram.image()
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                )
+            case .tiktok:
+                // Official TikTok note with cyan / magenta chromatic offsets.
+                ZStack {
+                    Hugeicons.tiktok.image()
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .foregroundStyle(Color(hex: "25F4EE"))
+                        .offset(x: -1.1, y: 0.8)
+                    Hugeicons.tiktok.image()
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .foregroundStyle(Color(hex: "FE2C55"))
+                        .offset(x: 1.1, y: -0.8)
+                    Hugeicons.tiktok.image()
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .foregroundStyle(Color(hex: "010101"))
+                }
+            case .linkedin:
+                // Official LinkedIn blue (#0A66C2).
+                Hugeicons.linkedin01.image()
                     .renderingMode(.template)
                     .resizable()
                     .scaledToFit()
-                    .foregroundStyle(Color(hex: "25F4EE"))
-                    .offset(x: -1.1, y: 0.8)
-                Hugeicons.tiktok.image()
-                    .renderingMode(.template)
-                    .resizable()
-                    .scaledToFit()
-                    .foregroundStyle(Color(hex: "FE2C55"))
-                    .offset(x: 1.1, y: -0.8)
-                Hugeicons.tiktok.image()
-                    .renderingMode(.template)
-                    .resizable()
-                    .scaledToFit()
-                    .foregroundStyle(Color(hex: "010101"))
+                    .foregroundStyle(Color(hex: "0A66C2"))
             }
-            .frame(width: size, height: size)
-            .accessibilityHidden(true)
         }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 }
 
