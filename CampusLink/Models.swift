@@ -71,13 +71,14 @@ extension School {
             if !hex.isEmpty { return Color(hex: hex) }
             return sample?.color ?? Color(hex: "111114")
         }()
+        let remoteLogo = remote.logo_url?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return School(
             id: slug.isEmpty ? String(remote.id) : slug,
             name: remote.short_name.isEmpty ? remote.name : remote.short_name,
             sub: remote.name,
             color: color,
             students: remote.city ?? "",
-            logoUrl: sample?.logoUrl
+            logoUrl: remoteLogo.isEmpty ? sample?.logoUrl : remoteLogo
         )
     }
 
@@ -348,7 +349,7 @@ private func espn(_ id: Int) -> String { "https://a.espncdn.com/i/teamlogos/ncaa
 let sampleSchools: [School] = [
     School(id: "usc",      name: "USC",           sub: "University of Southern California",   color: Color(hex: "990000"), students: "2.1k", logoUrl: espn(30)),
     School(id: "ucla",     name: "UCLA",           sub: "University of California, Los Angeles", color: Color(hex: "2774AE"), students: "3.4k", logoUrl: espn(26)),
-    School(id: "ucsb",     name: "UCSB",           sub: "UC Santa Barbara",                     color: Color(hex: "003660"), students: "1.5k", logoUrl: espn(12)),
+    School(id: "ucsb",     name: "UCSB",           sub: "UC Santa Barbara",                     color: Color(hex: "003660"), students: "1.5k", logoUrl: espn(2540)),
     School(id: "sdsu",     name: "SDSU",           sub: "San Diego State University",           color: Color(hex: "A6192E"), students: "1.8k", logoUrl: espn(21)),
     School(id: "stanford", name: "Stanford",       sub: "Stanford University",                  color: Color(hex: "8C1515"), students: "1.8k", logoUrl: espn(24)),
     School(id: "umich",    name: "Michigan",       sub: "University of Michigan",               color: Color(hex: "00274C"), students: "1.9k", logoUrl: espn(130)),

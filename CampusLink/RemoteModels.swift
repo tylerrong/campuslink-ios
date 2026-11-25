@@ -8,6 +8,8 @@ struct RemoteSchool: Codable, Hashable {
     let primary_color: String?
     let secondary_color: String?
     let city: String?
+    /// Absolute ESPN/catalog PNG from mobile /me when available.
+    let logo_url: String?
 }
 
 struct RemoteStudentProfile: Codable, Hashable {
@@ -106,7 +108,8 @@ struct RemoteUser: Hashable {
             short_name: "UCLA",
             primary_color: "#2774AE",
             secondary_color: "#FFD100",
-            city: "Los Angeles"
+            city: "Los Angeles",
+            logo_url: "https://a.espncdn.com/i/teamlogos/ncaa/500/26.png"
         )
         if asOrg {
             return RemoteUser(
