@@ -16,7 +16,7 @@ final class AuthStore {
 #endif
     var authMessage: String = ""
     var isBusy = false
-    /// True when browsing with the local Simulator preview account (no network session).
+    /// True when browsing with the local demo catalog (Simulator Preview or App Review). No live network.
     var isSimulatorPreview = false
 
     var isSignedIn: Bool { sessionToken != nil && user != nil && !(user?.isBrand ?? true) }
@@ -27,10 +27,17 @@ final class AuthStore {
 
     private var webAuthSession: ASWebAuthenticationSession?
 
+    /// Temporary App Store / TestFlight review credentials. Remove after approval.
+    /// Put these in App Store Connect → TestFlight → Test Information (Sign-in required).
+    enum AppReviewLogin {
+        static let username = "apple@review.campuslink.com"
+        static let password = "CampusLinkReview1"
+    }
+
     init() {
 #if targetEnvironment(simulator)
         // Simulator starts signed out so Welcome → Sign in can be reviewed.
-        // Use “Preview app (Simulator)” on SignInView to skip into the main shell.
+        // Use App Review fields or “Preview app (Simulator)” to open the main shell.
         isSimulatorPreview = false
         sessionToken = nil
         user = nil
@@ -70,9 +77,8 @@ final class AuthStore {
         }
     }
 
-#if targetEnvironment(simulator)
-    /// Skip magic/Google auth so UI can be reviewed in Simulator.
-    func enterSimulatorPreview(asOrg: Bool = false) {
+    /// Local demo session with sample Drops (no live API). Used by Simulator Preview + App Review login.
+    func enterDemoPreview(asOrg: Bool = false) {
         KeychainStore.clearToken()
         isSimulatorPreview = true
         sessionToken = Self.simulatorPreviewToken
@@ -81,7 +87,24 @@ final class AuthStore {
         isBusy = false
         isRestoring = false
     }
+
+#if targetEnvironment(simulator)
+    /// Skip magic/Google auth so UI can be reviewed in Simulator.
+    func enterSimulatorPreview(asOrg: Bool = false) {
+        enterDemoPreview(asOrg: asOrg)
+    }
 #endif
+
+    /// Username / password path for Apple App Review (maps to ASC demo account fields).
+    func signInWithAppReview(username: String, password: String) throws {
+        let user = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pass = password.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard user.compare(AppReviewLogin.username, options: .caseInsensitive) == .orderedSame,
+              pass == AppReviewLogin.password else {
+            throw APIError.message("Invalid username or password.")
+        }
+        enterDemoPreview(asOrg: false)
+    }
 
     func requestMagicLink(email: String) async throws {
         isBusy = true
