@@ -209,6 +209,21 @@ struct RemoteOpportunity: Codable, Identifiable, Hashable {
     let offer_type: String?
     let image_url: String?
     let user_has_expressed_interest: Bool
+    let category: String?
+    let audience: String?
+    let steps: [String]?
+    let tags: [String]?
+    let apply_note: String?
+    let capacity_hint: String?
+    let compensation_label: String?
+    /// CampusLink Drop fields (paid tasks).
+    let payout_cents: Int?
+    let remaining_slots: Int?
+    let slot_cap: Int?
+    let proof_requirements: String?
+    let task_url: String?
+    let task_type: String?
+    let action_description: String?
     let brand: RemoteOpportunityBrand
 }
 
@@ -286,7 +301,7 @@ enum APIError: LocalizedError {
         switch self {
         case .message(let m): return m
         case .brandNotSupported:
-            return "Brand accounts manage opportunities on joincampuslink.com. This app is for students and campus orgs."
+            return "Brand accounts manage CampusLink Drops on joincampuslink.com. This app is for students and campus orgs."
         case .unauthorized: return "Please sign in again."
         case .registrationRequired: return "Finish setting up your CampusLink profile."
         }
@@ -294,7 +309,7 @@ enum APIError: LocalizedError {
 }
 
 extension CampusDrop {
-    /// Map a joincampuslink opportunity into the existing Drop card model.
+    /// Map a joincampuslink Drop (paid task) into the existing Drop card model.
     static func fromOpportunity(_ opp: RemoteOpportunity) -> CampusDrop {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
@@ -303,7 +318,8 @@ extension CampusDrop {
         formatter.dateFormat = "yyyy-MM-dd"
 
         let start = formatter.date(from: opp.start_date) ?? Date()
-        let end = formatter.date(from: opp.end_date) ?? Date().addingTimeInterval(86400 * 14)
+        let end = formatter.date(from: opp.end_date)?.addingTimeInterval(86_400) ?? .distantFuture
+        let category = DropCategory(remoteValue: opp.task_type ?? opp.category)
         let domain: String? = {
             guard let site = opp.brand.website, let host = URL(string: site)?.host else { return nil }
             return host.replacingOccurrences(of: "www.", with: "")
@@ -317,6 +333,18 @@ extension CampusDrop {
             Color(red: 0.45, green: 0.30, blue: 0.85)
         ]
         let color = palette[abs(opp.id) % palette.count]
+        let payout = opp.payout_cents ?? 0
+        let remaining = opp.remaining_slots ?? 0
+        let slots = opp.slot_cap ?? remaining
+        let proofText = opp.proof_requirements?.nonEmptyTrimmed
+        let proofReqs: [ProofRequirement] = {
+            guard let proofText else { return [] }
+            return [ProofRequirement(id: "proof", label: proofText, kind: .screenshot)]
+        }()
+        var instructions = opp.steps ?? []
+        if instructions.isEmpty, let action = opp.action_description?.nonEmptyTrimmed {
+            instructions = [action]
+        }
 
         return CampusDrop(
             id: String(opp.id),
@@ -326,26 +354,78 @@ extension CampusDrop {
             brandColor: color,
             title: opp.title,
             description: opp.description,
-            category: .survey,
-            payoutCents: 0,
-            maxCompletions: 1,
-            remainingSlots: 1,
+            category: category,
+            payoutCents: payout,
+            maxCompletions: slots,
+            remainingSlots: remaining,
             schools: [],
             startAt: start,
             endAt: end,
             completionWindowSeconds: 0,
-            proofRequirements: [],
-            instructions: [
-                "Review the opportunity details.",
-                "Tap Apply to express interest.",
-                "The brand will follow up on CampusLink if you're a fit."
-            ],
-            eligibilityTags: [opp.brand.industry].compactMap { $0 }.filter { !$0.isEmpty },
-            audience: .both,
+            proofRequirements: proofReqs,
+            instructions: instructions,
+            eligibilityTags: opp.tags ?? [],
+            audience: AudienceFilter(rawValue: opp.audience ?? "") ?? .students,
             status: opp.status == "active" && end > Date() ? .live : .ended,
-            estimatedMinutes: 5,
+            estimatedMinutes: category.estimatedMinutes,
             isRemoteOpportunity: true,
-            hasApplied: opp.user_has_expressed_interest
+            hasApplied: opp.user_has_expressed_interest,
+            compensationLabel: opp.compensation_label?.nonEmptyTrimmed,
+            capacityHint: opp.capacity_hint?.nonEmptyTrimmed,
+            applyNote: opp.apply_note?.nonEmptyTrimmed,
+            taskUrl: opp.task_url?.nonEmptyTrimmed
         )
     }
 }
+
+private extension String {
+    var nonEmptyTrimmed: String? {
+        let value = trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+}
+
+#if targetEnvironment(simulator)
+func makePreviewOpportunities() -> [CampusDrop] {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withFullDate, .withDashSeparatorInDate]
+    let now = Date()
+    let examples: [(brand: String, title: String, category: String, audience: String,
+                    compensation: String, description: String, steps: [String])] = [
+        ("Olipop", "Create a campus Reel for Olipop", "content", "students", "Paid",
+         "Film a short Reel featuring Olipop during a regular day on campus.",
+         ["Share a link to a recent Reel.", "If selected, confirm the brief and posting date with the brand."]),
+        ("Notion", "Share how you organize your coursework", "survey", "students", "Paid",
+         "Answer a short survey about the tools you use to plan your classes.",
+         ["Tell us about your current coursework setup."]),
+        ("Celsius", "Host a Celsius sampling table", "activation", "both", "Product / gift",
+         "Run a one-hour sampling table with your campus community.",
+         ["Share your proposed location and event date."]),
+        ("Duet", "Try the Duet app", "app_install", "students", "Paid",
+         "Install Duet and share feedback on your first session.",
+         ["Describe what worked and what could be clearer."])
+    ]
+    return examples.enumerated().map { index, example in
+        CampusDrop.fromOpportunity(RemoteOpportunity(
+            id: index + 1, title: example.title, description: example.description,
+            start_date: formatter.string(from: now),
+            end_date: formatter.string(from: now.addingTimeInterval(Double(index + 3) * 86_400)),
+            status: "active", offer_type: "drop", image_url: nil,
+            user_has_expressed_interest: false, category: example.category, audience: example.audience,
+            steps: example.steps, tags: nil, apply_note: nil, capacity_hint: nil,
+            compensation_label: example.compensation,
+            payout_cents: 1500,
+            remaining_slots: 20,
+            slot_cap: 25,
+            proof_requirements: "Screenshot or confirmation of completion.",
+            task_url: nil,
+            task_type: example.category,
+            action_description: example.description,
+            brand: RemoteOpportunityBrand(
+                user_id: index + 1, name: example.brand, company_name: nil,
+                industry: nil, website: nil, picture: nil
+            )
+        ))
+    }
+}
+#endif

@@ -97,7 +97,7 @@ actor APIClient {
         return res.opportunities ?? []
     }
 
-    func apply(opportunityId: String, token: String) async throws {
+    func apply(opportunityId: String, token: String) async throws -> Bool {
         let (data, status) = try await send(
             path: "opportunities/\(opportunityId)/apply",
             method: "POST",
@@ -114,6 +114,7 @@ actor APIClient {
         try throwIfHTTPError(status: status, data: data)
         let res = try JSONDecoder().decode(ApplyResponse.self, from: data)
         guard res.success else { throw APIError.message(res.error ?? "Could not apply") }
+        return res.already_applied != true
     }
 
     var googleStartURL: URL {

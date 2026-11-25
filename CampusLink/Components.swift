@@ -534,6 +534,7 @@ struct CLTopBar: View {
                         .background(Circle().fill(theme.surfaceAlt))
                 }
                 .buttonStyle(CLPressStyle())
+                .accessibilityLabel("Back")
             } else {
                 Color.clear.frame(width: 42, height: 42)
             }
@@ -557,7 +558,7 @@ struct CLTopBar: View {
 }
 
 // MARK: - Primary Tab Bar
-/// Two islands: left = CampusLink logo + Drops feed; right = Active / Earnings / You icons.
+/// Drops sits beside My Drops, Earnings, and You shortcuts.
 struct CLTabBar: View {
     @Binding var tab: AppTab
     let theme: CLTheme
@@ -570,7 +571,7 @@ struct CLTabBar: View {
     }
 
     private let sideTabs: [SideTab] = [
-        .init(id: .active, icon: "clock.fill", label: "Active"),
+        .init(id: .active, icon: "tray.fill", label: "My Drops"),
         .init(id: .earnings, icon: "banknote.fill", label: "Earnings"),
         .init(id: .you, icon: "person.fill", label: "You"),
     ]
@@ -586,9 +587,9 @@ struct CLTabBar: View {
                     sideButton(item)
                 }
             }
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 8)
+            .frame(maxWidth: 184)
             .frame(height: 56)
-            .frame(maxWidth: .infinity)
             .background(
                 Capsule(style: .continuous)
                     .fill(Color(hex: "F3F3F5"))
@@ -602,7 +603,7 @@ struct CLTabBar: View {
         .padding(.top, 2)
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity)
-        .background(Color.clear)
+        .background(theme.bg.ignoresSafeArea(edges: .bottom))
     }
 
     private var dropsIsland: some View {
@@ -648,7 +649,7 @@ struct CLTabBar: View {
             Image(systemName: item.icon)
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundColor(selected ? theme.primary : theme.text.opacity(0.42))
-                .frame(maxWidth: .infinity)
+                .frame(minWidth: 44, maxWidth: 56)
                 .frame(height: 56)
                 .contentShape(Rectangle())
         }

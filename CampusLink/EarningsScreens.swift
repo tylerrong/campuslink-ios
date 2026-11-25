@@ -8,11 +8,11 @@ struct EarningsScreen: View {
     let theme: CLTheme
 
     var body: some View {
-        CLScrollView(theme: theme, bottomFade: 40) {
+        CLScrollView(theme: theme, bottomFade: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 CLScreenHeader(
                     title: "Earnings",
-                    subtitle: "Escrow in, cash out when you're ready.",
+                    subtitle: "Payouts are coming soon.",
                     theme: theme
                 )
 
@@ -24,7 +24,7 @@ struct EarningsScreen: View {
                     CLColorStatCard(
                         title: "Pending",
                         value: state.pendingBalanceCents.dollarsCompact,
-                        detail: "in escrow",
+                        detail: "awaiting payout",
                         icon: "hourglass",
                         fill: theme.accentOrange,
                         compact: true
@@ -47,7 +47,7 @@ struct EarningsScreen: View {
                     CLEmptyState(
                         icon: "banknote",
                         title: "No earnings yet",
-                        subtitle: "Approved Drop payouts land here. Pending funds stay in escrow until verified.",
+                        subtitle: "Your Drop payouts will appear here.",
                         actionLabel: "Browse Drops",
                         action: { state.setTab(.drops) },
                         theme: theme
@@ -65,8 +65,8 @@ struct EarningsScreen: View {
                     .padding(.horizontal, 20)
                 }
 
-                Color.clear.frame(height: 100)
             }
+            .padding(.bottom, 20)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -83,10 +83,6 @@ struct EarningsScreen: View {
                     .font(.display(40, weight: .black))
                     .foregroundColor(.white)
                     .tracking(-1.2)
-                Text("Min \(AppState.cashOutMinimumCents.dollarsCompact) · \(state.payoutMethodLabel)")
-                    .font(.bodyFont(12, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.78))
-                    .lineLimit(2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -106,8 +102,9 @@ struct EarningsScreen: View {
                 .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 4)
             }
             .buttonStyle(CLPressStyle())
-            .disabled(state.payableBalanceCents < AppState.cashOutMinimumCents)
-            .opacity(state.payableBalanceCents < AppState.cashOutMinimumCents ? 0.55 : 1)
+            .accessibilityLabel("Cash out")
+            .disabled(!state.canPreviewCashOut)
+            .opacity(state.canPreviewCashOut ? 1 : 0.55)
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -184,6 +181,7 @@ struct CashOutScreen: View {
                     haptic(.medium)
                     state.cashOut()
                 }
+                .disabled(!state.canPreviewCashOut)
                 .padding(.bottom, 28)
             }
             .padding(.horizontal, 24)
@@ -201,13 +199,9 @@ struct YouProfileScreen: View {
     let theme: CLTheme
 
     var body: some View {
-        CLScrollView(theme: theme, bottomFade: 40) {
+        CLScrollView(theme: theme, bottomFade: 0) {
             VStack(alignment: .leading, spacing: 0) {
-                CLScreenHeader(
-                    title: "You",
-                    subtitle: "Profile, payouts, and alerts.",
-                    theme: theme
-                )
+                CLScreenHeader(title: "You", theme: theme)
 
                 Button {
                     state.push(.editProfile)
@@ -218,63 +212,35 @@ struct YouProfileScreen: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 16)
 
-                HStack(spacing: 12) {
-                    CLColorStatCard(
-                        title: "School",
-                        value: state.schoolId.isEmpty ? "—" : state.school.name,
-                        detail: verificationLabel,
-                        icon: "checkmark.seal.fill",
-                        fill: theme.accentBlue,
-                        compact: true
-                    )
-                    CLColorStatCard(
-                        title: "Lifetime",
-                        value: state.lifetimeEarnedCents.dollarsCompact,
-                        detail: "lifetime",
-                        icon: "star.fill",
-                        fill: theme.primary,
-                        compact: true
-                    )
-                }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 18)
-
                 if hasSocialOrLinks {
                     profileMetaCard
                         .padding(.horizontal, 20)
                         .padding(.bottom, 18)
                 }
 
-                VStack(spacing: 0) {
-                    settingsRow(icon: "checkmark.seal", title: "School verification", value: verificationLabel) {
-                        state.push(.verification)
+                Button {
+                    state.push(.payoutSettings)
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "creditcard")
+                            .foregroundColor(theme.primary)
+                        Text("Payout method")
+                            .font(.bodyFont(15, weight: .semibold))
+                            .foregroundColor(theme.text)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(theme.textFaint)
                     }
-                    divider
-                    settingsRow(icon: "creditcard", title: "Payout method", value: state.payoutMethodLabel) {
-                        state.push(.payoutSettings)
-                    }
-                    divider
-                    settingsRow(icon: "bell", title: "Notifications", value: state.notificationsEnabled ? "On" : "Off") {
-                        state.push(.notifications)
-                    }
+                    .padding(16)
+                    .stickerCard(fill: theme.card, ink: theme.ink, cornerRadius: theme.radiusLg, shadow: theme.shadowSm, borderWidth: 0)
                 }
-                .stickerCard(fill: theme.card, ink: theme.ink, cornerRadius: theme.radiusLg, shadow: theme.shadowSm, borderWidth: 0)
+                .buttonStyle(CLPressStyle())
+                .accessibilityLabel("Payout method")
                 .padding(.horizontal, 20)
+                .padding(.bottom, 16)
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Alert preferences")
-                        .font(.display(15, weight: .heavy))
-                        .foregroundColor(theme.text)
-                    Toggle("Drop alerts", isOn: $state.dropAlertsEnabled)
-                    Toggle("Payout alerts", isOn: $state.payoutAlertsEnabled)
-                    Toggle("All notifications", isOn: $state.notificationsEnabled)
-                }
-                .toggleStyle(SwitchToggleStyle(tint: theme.primary))
-                .font(.bodyFont(15))
-                .padding(16)
-                .stickerCard(fill: theme.card, ink: theme.ink, cornerRadius: theme.radiusLg, shadow: theme.shadowSm, borderWidth: 0)
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
+                alertPreferences
 
                 CLButton(
                     label: "Log out",
@@ -290,15 +256,15 @@ struct YouProfileScreen: View {
                     state.logOut()
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, 28)
+                .padding(.top, 20)
 
-                Text("CampusLink Drops · joincampuslink.com")
+                Text("CampusLink Drops - joincampuslink.com")
                     .font(.bodyFont(12, weight: .medium))
-                    .foregroundColor(theme.textFaint)
+                    .foregroundColor(theme.textMuted)
                     .frame(maxWidth: .infinity)
-                    .padding(.top, 16)
-
-                Color.clear.frame(height: 100)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
+                    .padding(.bottom, 20)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -309,12 +275,23 @@ struct YouProfileScreen: View {
         }
     }
 
-    private var verificationLabel: String {
-        switch state.verificationStatus {
-        case .verified: return "Verified"
-        case .pending: return "Pending"
-        case .unverified: return "Not verified"
+    private var alertPreferences: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Alert preferences")
+                .font(.display(15, weight: .heavy))
+                .foregroundColor(theme.text)
+                .accessibilityAddTraits(.isHeader)
+            Toggle("Drop alerts", isOn: $state.dropAlertsEnabled)
+                .disabled(!state.notificationsEnabled)
+            Toggle("Payout alerts", isOn: $state.payoutAlertsEnabled)
+                .disabled(!state.notificationsEnabled)
+            Toggle("All notifications", isOn: $state.notificationsEnabled)
         }
+        .toggleStyle(SwitchToggleStyle(tint: theme.primary))
+        .font(.bodyFont(15))
+        .padding(16)
+        .stickerCard(fill: theme.card, ink: theme.ink, cornerRadius: theme.radiusLg, shadow: theme.shadowSm, borderWidth: 0)
+        .padding(.horizontal, 20)
     }
 
     private var profileHeader: some View {
@@ -465,33 +442,6 @@ struct YouProfileScreen: View {
         }
     }
 
-    private var divider: some View {
-        theme.line.frame(height: 1).padding(.leading, 54)
-    }
-
-    private func settingsRow(icon: String, title: String, value: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 14) {
-                Image(systemName: icon)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(theme.primary)
-                    .frame(width: 28)
-                Text(title)
-                    .font(.bodyFont(15, weight: .medium))
-                    .foregroundColor(theme.text)
-                Spacer()
-                Text(value)
-                    .font(.bodyFont(13))
-                    .foregroundColor(theme.textMuted)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(theme.textFaint)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 16)
-        }
-        .buttonStyle(CLPressStyle(scale: 0.99))
-    }
 }
 
 struct EditProfileScreen: View {
@@ -671,31 +621,42 @@ struct PayoutSettingsScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             CLTopBar(title: "Payout method", onBack: { state.pop() }, theme: theme)
-            VStack(spacing: 10) {
-                ForEach(methods, id: \.self) { method in
-                    Button {
-                        state.payoutMethodLabel = method
-                        state.showToast("Payout method updated", icon: "creditcard")
-                        state.pop()
-                    } label: {
-                        HStack {
-                            Text(method)
-                                .font(.bodyFont(15, weight: .medium))
-                                .foregroundColor(theme.text)
-                            Spacer()
-                            if state.payoutMethodLabel == method {
-                                Image(systemName: "checkmark")
-                                    .foregroundColor(theme.primary)
-                            }
-                        }
-                        .padding(16)
-                        .stickerCard(fill: theme.card, ink: theme.ink, cornerRadius: 14, shadow: 0, borderWidth: theme.borderThinWidth)
-                    }
-                    .buttonStyle(CLPressStyle())
-                }
+            if state.sessionToken != AuthStore.simulatorPreviewToken {
                 Spacer()
+                CLEmptyState(
+                    icon: "creditcard",
+                    title: "Payout setup is coming soon",
+                    subtitle: "You’ll be able to connect a payout method here.",
+                    theme: theme
+                )
+                Spacer()
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(methods, id: \.self) { method in
+                        Button {
+                            state.payoutMethodLabel = method
+                            state.showToast("Payout method updated", icon: "creditcard")
+                            state.pop()
+                        } label: {
+                            HStack {
+                                Text(method)
+                                    .font(.bodyFont(15, weight: .medium))
+                                    .foregroundColor(theme.text)
+                                Spacer()
+                                if state.payoutMethodLabel == method {
+                                    Image(systemName: "checkmark")
+                                        .foregroundColor(theme.primary)
+                                }
+                            }
+                            .padding(16)
+                            .stickerCard(fill: theme.card, ink: theme.ink, cornerRadius: 14, shadow: 0, borderWidth: theme.borderThinWidth)
+                        }
+                        .buttonStyle(CLPressStyle())
+                    }
+                    Spacer()
+                }
+                .padding(20)
             }
-            .padding(20)
         }
         .background(theme.bg.ignoresSafeArea())
         .navigationBarBackButtonHidden(true)

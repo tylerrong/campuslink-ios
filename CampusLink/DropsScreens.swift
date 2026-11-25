@@ -1,99 +1,71 @@
 import SwiftUI
-import UIKit
-import Hugeicons
 
-// MARK: - Drop card
+// MARK: - Drop card (mirrors web GigCard content)
 struct DropCard: View {
     let drop: CampusDrop
     let theme: CLTheme
-    var compact: Bool = false
-
-    private var urgencyHot: Bool {
-        let hours = drop.endAt.timeIntervalSinceNow / 3600
-        return hours < 6 || drop.remainingSlots < 15
-    }
-
-    private var spotsTaken: CGFloat {
-        guard drop.maxCompletions > 0 else { return 0 }
-        return CGFloat(drop.maxCompletions - drop.remainingSlots) / CGFloat(drop.maxCompletions)
-    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 14) {
-                brandMark
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(drop.brand)
-                        .font(.bodyFont(13, weight: .bold))
-                        .foregroundColor(drop.brandColor)
-
-                    Text(drop.title)
-                        .font(.display(compact ? 17 : 19, weight: .heavy))
-                        .foregroundColor(theme.text)
-                        .tracking(-0.35)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                Text(drop.payoutLabel)
-                    .font(.display(16, weight: .black))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Capsule().fill(theme.accentGreen))
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 12) {
+                OpportunityBrandMark(drop: drop)
+                Text(drop.brand)
+                    .font(.bodyFont(13, weight: .semibold))
+                    .foregroundColor(theme.textMuted)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                MetadataTag(label: drop.payoutLabel, color: theme.primary, theme: theme)
             }
 
-            HStack(spacing: 8) {
-                metaChip(drop.timeLeftLabel, color: urgencyHot ? theme.primary : theme.accentBlue)
-                metaChip("~\(drop.estimatedMinutes)m", color: theme.textMuted)
-                metaChip(drop.category.rawValue, color: theme.textMuted)
-                Spacer(minLength: 0)
-            }
+            Text(drop.title)
+                .font(.display(19, weight: .bold))
+                .foregroundColor(theme.text)
+                .fixedSize(horizontal: false, vertical: true)
 
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text(drop.schoolLabel)
-                        .font(.bodyFont(12, weight: .semibold))
+            Text(drop.cardBlurb)
+                .font(.bodyFont(14))
+                .foregroundColor(theme.textMuted)
+                .lineLimit(2)
+
+            MetadataTag(label: drop.category.rawValue, theme: theme)
+
+            Divider().overlay(theme.line)
+
+            HStack(spacing: 10) {
+                if let deadline = drop.deadlineLabel {
+                    Label(deadline, systemImage: "calendar")
+                        .font(.bodyFont(12, weight: .medium))
                         .foregroundColor(theme.textMuted)
                         .lineLimit(1)
-                    Spacer()
-                    Text("\(drop.remainingSlots) spots left")
-                        .font(.bodyFont(12, weight: .bold))
-                        .foregroundColor(urgencyHot ? theme.primary : theme.text)
-                        .monospacedDigit()
                 }
-
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(theme.surfaceAlt)
-                        Capsule()
-                            .fill(urgencyHot ? theme.primary : theme.accentGreen)
-                            .frame(width: max(6, geo.size.width * (1 - spotsTaken)))
-                    }
-                }
-                .frame(height: 8)
+                Text(drop.spotsLabel)
+                    .font(.bodyFont(12, weight: .semibold))
+                    .foregroundColor(drop.hasApplied ? theme.success : theme.textMuted)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Text(drop.hasApplied ? "View status" : "View Drop")
+                    .font(.bodyFont(13, weight: .bold))
+                    .foregroundColor(theme.primary)
             }
         }
-        .padding(18)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: theme.radiusLg, style: .continuous)
-                .fill(theme.card)
-                .shadow(color: Color.black.opacity(0.06), radius: 18, x: 0, y: 8)
-        )
+        .stickerCard(fill: theme.card, ink: theme.ink, cornerRadius: theme.radiusLg, shadow: theme.shadowSm, borderWidth: 0)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(drop.title) from \(drop.brand), \(drop.payoutLabel), \(drop.timeLeftLabel)")
+        .accessibilityLabel("\(drop.brand), \(drop.title), \(drop.payoutLabel)")
     }
+}
 
-    private var brandMark: some View {
+struct OpportunityBrandMark: View {
+    let drop: CampusDrop
+
+    var body: some View {
         ZStack {
-            if let urlStr = drop.logoUrl, let url = URL(string: urlStr) {
+            if let logo = drop.logoUrl, let url = URL(string: logo) {
                 AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFit().padding(11)
-                    default:
+                    if let image = phase.image {
+                        image.resizable().scaledToFit().padding(9)
+                    } else {
                         monogram
                     }
                 }
@@ -101,122 +73,60 @@ struct DropCard: View {
                 monogram
             }
         }
-        .frame(width: 54, height: 54)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(drop.brandColor.opacity(0.12))
-        )
+        .frame(width: 46, height: 46)
+        .background(drop.brandColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityHidden(true)
     }
 
     private var monogram: some View {
         Text(drop.initials)
-            .font(.display(17, weight: .black))
+            .font(.display(15, weight: .bold))
             .foregroundColor(drop.brandColor)
-    }
-
-    private func metaChip(_ text: String, color: Color) -> some View {
-        Text(text)
-            .font(.bodyFont(12, weight: .bold))
-            .foregroundColor(color)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Capsule().fill(color.opacity(0.12)))
     }
 }
 
-// MARK: - Feed
+// MARK: - Drops feed
 struct DropsFeedScreen: View {
     @Bindable var state: AppState
     let theme: CLTheme
+    @State private var selectedFilter: DropFeedFilter = .all
 
-    private var drops: [CampusDrop] { state.rankedDrops() }
-    private var liveCount: Int { drops.count }
-    private var activeCount: Int { state.activeClaims.count }
-    private var approvedCount: Int {
-        state.submissions.filter { $0.reviewStatus == .approved }.count
-    }
-    private var weeklyGoal: Int { max(liveCount, 5) }
-    private var weeklyProgress: CGFloat {
-        let done = min(approvedCount + activeCount, weeklyGoal)
-        return CGFloat(done) / CGFloat(weeklyGoal)
-    }
-
-    private struct FeedFilter: Identifiable {
-        let id: String
-        let label: String
-        let icon: HugeiconsAsset
-    }
-
-    private var filters: [FeedFilter] {
-        var list: [FeedFilter] = [
-            .init(id: "all", label: "All", icon: Hugeicons.gridView),
-            .init(id: "appInstall", label: "App install", icon: Hugeicons.smartPhone01),
-            .init(id: "survey", label: "Survey", icon: Hugeicons.quiz01),
-            .init(id: "socialPost", label: "Social", icon: Hugeicons.share05),
-        ]
-        if state.profileKind == .org {
-            list.insert(.init(id: "orgs", label: "For orgs", icon: Hugeicons.userGroup), at: 1)
-        }
-        return list
+    private var filteredOpportunities: [CampusDrop] {
+        state.rankedDrops(filter: selectedFilter)
     }
 
     var body: some View {
-        CLScrollView(theme: theme, bottomFade: 40) {
+        CLScrollView(theme: theme, bottomFade: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 header
-                statsBlock
+                summary
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 18)
+                    .padding(.bottom, 16)
+                filters.padding(.bottom, 16)
 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(filters) { f in
-                            CLChip(
-                                label: f.label,
-                                selected: state.feedFilter == f.id,
-                                hugeIcon: f.icon,
-                                iconOnly: false,
-                                theme: theme
-                            ) {
-                                state.feedFilter = f.id
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                }
-                .frame(maxWidth: .infinity)
-                .scrollBounceBehavior(.basedOnSize, axes: .vertical)
-                .padding(.bottom, 14)
-
-                HStack {
-                    Text("Opportunities")
-                        .font(.display(20, weight: .heavy))
-                        .foregroundColor(theme.text)
-                    Spacer()
-                    if state.isLoadingFeed {
-                        ProgressView()
-                    } else {
-                        Text("\(liveCount) live")
-                            .font(.bodyFont(13, weight: .bold))
-                            .foregroundColor(theme.accentGreen)
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 12)
-
-                if drops.isEmpty {
+                if !state.feedError.isEmpty {
                     CLEmptyState(
-                        icon: "briefcase",
-                        title: state.isLoadingFeed ? "Loading…" : "No opportunities right now",
-                        subtitle: state.feedError.isEmpty
-                            ? "Brand-posted opportunities for your school will show up here."
-                            : state.feedError,
+                        icon: "wifi.slash",
+                        title: "Couldn’t refresh Drops",
+                        subtitle: state.feedError,
+                        actionLabel: "Try again",
+                        action: { Task { await refresh() } },
                         theme: theme
                     )
-                    .padding(.top, 24)
+                    .padding(.bottom, 16)
+                }
+
+                if filteredOpportunities.isEmpty {
+                    if state.isLoadingFeed {
+                        ProgressView("Loading Drops")
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 40)
+                    } else if state.feedError.isEmpty {
+                        emptyFeed.padding(.top, 24)
+                    }
                 } else {
-                    VStack(spacing: 14) {
-                        ForEach(drops) { drop in
+                    LazyVStack(spacing: 12) {
+                        ForEach(filteredOpportunities) { drop in
                             Button {
                                 haptic(.light)
                                 state.push(.dropDetail, id: drop.id)
@@ -224,473 +134,368 @@ struct DropsFeedScreen: View {
                                 DropCard(drop: drop, theme: theme)
                             }
                             .buttonStyle(CLPressStyle(scale: 0.985))
+                            .accessibilityIdentifier("drop-\(drop.id)")
                         }
                     }
                     .padding(.horizontal, 20)
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-
-                Color.clear.frame(height: 110)
             }
+            .padding(.bottom, 20)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.bg.ignoresSafeArea())
-        .refreshable {
-            await state.refreshOpportunities()
-            await state.refreshApplied()
-        }
-        .onAppear { _ = state.expireStaleClaimsIfNeeded() }
+        .refreshable { await refresh() }
+        .onChange(of: state.remoteUser?.id) { _, _ in selectedFilter = .all }
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
+            if !state.schoolId.isEmpty {
                 HStack(spacing: 8) {
-                    SchoolLogo(school: state.school, size: 28, cornerRadius: 8, showBorder: false)
+                    SchoolLogo(school: state.school, size: 26, cornerRadius: 7, showBorder: false)
+                        .accessibilityHidden(true)
                     Text(state.school.name)
                         .font(.bodyFont(13, weight: .bold))
                         .foregroundColor(theme.textMuted)
                 }
-                Text("Discover")
-                    .font(.display(34, weight: .black))
-                    .tracking(-1.0)
-                    .foregroundColor(theme.text)
-                Text(encouragement)
-                    .font(.bodyFont(15, weight: .medium))
-                    .foregroundColor(theme.textMuted)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Button {
-                state.push(.notifications)
-            } label: {
-                ZStack(alignment: .topTrailing) {
-                    Image(systemName: "bell.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(theme.text)
-                        .frame(width: 44, height: 44)
-                        .background(Circle().fill(theme.surfaceAlt))
-                    if state.unreadNotificationCount > 0 {
-                        Text("\(min(state.unreadNotificationCount, 9))")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(.white)
-                            .frame(width: 16, height: 16)
-                            .background(Circle().fill(theme.primary))
-                            .offset(x: 2, y: -2)
-                    }
-                }
-            }
-            .buttonStyle(CLPressStyle())
+            Text("Drops")
+                .font(.display(34, weight: .black))
+                .tracking(-1)
+                .foregroundColor(theme.text)
+                .accessibilityAddTraits(.isHeader)
+            Text("Claim a paid Drop from a brand, submit proof, and get paid.")
+                .font(.bodyFont(14))
+                .foregroundColor(theme.textMuted)
+                .padding(.top, 2)
         }
         .padding(.horizontal, 20)
         .padding(.top, 8)
-        .padding(.bottom, 16)
+        .padding(.bottom, 14)
     }
 
-    private var encouragement: String {
-        if activeCount > 0 { return "Keep going — finish your open claims." }
-        if liveCount > 0 { return "New Drops are live. Grab one before spots run out." }
-        return "You're all caught up. Check back soon."
-    }
+    private var summary: some View {
+        let liveCount = state.rankedDrops().count
+        let goal = max(5, liveCount)
+        let claims = state.weeklyApplicationCount
+        let progress = CGFloat(min(claims, goal)) / CGFloat(goal)
+        let activeCount = state.appliedOpportunities.count
 
-    private var statsBlock: some View {
-        VStack(spacing: 12) {
-            // Hero progress card (middle-reference green card)
-            HStack(alignment: .center, spacing: 16) {
+        return VStack(spacing: 12) {
+            HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("This week")
                         .font(.bodyFont(14, weight: .bold))
                         .foregroundColor(.white.opacity(0.85))
-                    Text("\(Int((weeklyProgress * 100).rounded()))%")
+                    Text("\(Int((progress * 100).rounded()))%")
                         .font(.display(40, weight: .black))
-                        .foregroundColor(.white)
                         .tracking(-1.2)
-                    Text("\(min(approvedCount + activeCount, weeklyGoal))/\(weeklyGoal) drops moving")
+                        .foregroundColor(.white)
+                    Text("\(claims)/\(goal) Drops claimed")
                         .font(.bodyFont(13, weight: .semibold))
                         .foregroundColor(.white.opacity(0.85))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 ZStack {
-                    CLProgressRing(progress: weeklyProgress, lineWidth: 9)
+                    CLProgressRing(progress: progress, lineWidth: 9)
                         .frame(width: 78, height: 78)
+                        .accessibilityHidden(true)
                     VStack(spacing: 0) {
                         Text("\(liveCount)")
                             .font(.display(20, weight: .black))
-                            .foregroundColor(.white)
                         Text("live")
-                            .font(.eyebrow(9))
-                            .foregroundColor(.white.opacity(0.8))
+                            .font(.bodyFont(12, weight: .semibold))
                     }
+                    .foregroundColor(.white)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(liveCount) live Drops")
                 }
             }
             .padding(20)
             .colorBlockCard(fill: theme.accentGreen, cornerRadius: theme.radiusXl)
 
             HStack(spacing: 12) {
-                CLColorStatCard(
-                    title: "Active",
-                    value: "\(activeCount)",
-                    detail: activeCount == 1 ? "claim open" : "claims open",
-                    icon: "flame.fill",
-                    fill: theme.primary,
-                    compact: true
-                )
-                CLColorStatCard(
-                    title: "Earned",
-                    value: state.lifetimeEarnedCents.dollarsCompact,
-                    detail: "lifetime",
-                    icon: "checkmark.seal.fill",
-                    fill: theme.accentBlue,
-                    compact: true
-                )
-            }
+                Button { state.setTab(.active) } label: {
+                    CLColorStatCard(
+                        title: "My Drops",
+                        value: "\(activeCount)",
+                        detail: activeCount == 1 ? "claimed" : "claimed",
+                        icon: "flame.fill",
+                        fill: theme.primary,
+                        compact: true
+                    )
+                }
+                .buttonStyle(CLPressStyle(scale: 0.985))
 
-            // Escrow note as soft white card
-            HStack(spacing: 12) {
-                Image(systemName: "lock.shield.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(theme.accentGreen)
-                    .frame(width: 40, height: 40)
-                    .background(Circle().fill(theme.accentGreen.opacity(0.14)))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Escrow protected")
-                        .font(.display(14, weight: .heavy))
-                        .foregroundColor(theme.text)
-                    Text("Brand budgets unlock when your proof is approved.")
-                        .font(.bodyFont(12, weight: .medium))
-                        .foregroundColor(theme.textMuted)
+                Button { state.setTab(.earnings) } label: {
+                    CLColorStatCard(
+                        title: "Earned",
+                        value: (state.payableBalanceCents + state.paidTotalCents).dollarsCompact,
+                        detail: "lifetime",
+                        icon: "checkmark.seal.fill",
+                        fill: theme.accentBlue,
+                        compact: true
+                    )
+                }
+                .buttonStyle(CLPressStyle(scale: 0.985))
+            }
+        }
+    }
+
+    private var filters: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(DropFeedFilter.allCases) { filter in
+                    CLChip(label: filter.rawValue, selected: selectedFilter == filter, theme: theme) {
+                        selectedFilter = filter
+                    }
+                    .accessibilityAddTraits(selectedFilter == filter ? .isSelected : [])
                 }
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .stickerCard(fill: theme.card, ink: theme.ink, cornerRadius: 22, shadow: theme.shadowSm, borderWidth: 0)
+            .padding(.horizontal, 20)
         }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+    }
+
+    private var emptyFeed: some View {
+        CLEmptyState(
+            icon: "briefcase",
+            title: selectedFilter == .all ? "No Drops right now" : "No matches in this category",
+            subtitle: selectedFilter == .all
+                ? "Paid Drops available to your campus will show up here."
+                : "Browse all Drops to see what else is open.",
+            actionLabel: selectedFilter == .all ? nil : "Show all",
+            action: selectedFilter == .all ? nil : { selectedFilter = .all },
+            theme: theme
+        )
+    }
+
+    private func refresh() async {
+        await state.refreshOpportunities()
+        await state.refreshApplied()
     }
 }
 
-// MARK: - Detail
+// MARK: - Drop detail
 struct DropDetailScreen: View {
     @Bindable var state: AppState
+    let opportunityID: String
     let theme: CLTheme
 
-    private var drop: CampusDrop { state.detailDrop ?? state.drops[0] }
-    private var existingClaim: DropClaim? { state.claim(forDropId: drop.id) }
-
-    /// Window safe-area top — reliable inside NavigationStack where ScrollView insets fight ignoresSafeArea.
-    private var topInset: CGFloat {
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
-        let inset = scene?.windows.first(where: \.isKeyWindow)?.safeAreaInsets.top
-            ?? scene?.windows.first?.safeAreaInsets.top
-            ?? 59
-        return max(inset, 47)
-    }
-
     var body: some View {
-        ZStack(alignment: .bottom) {
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 0) {
-                    hero
-                        // Pull the brand wash into the status-bar strip (NavStack won't
-                        // give that space to SwiftUI content; chrome paints the same color).
-                        .padding(.top, -topInset)
+        VStack(spacing: 0) {
+            CLTopBar(title: "Drop", onBack: { state.pop() }, trailing: shareButton, theme: theme)
 
-                    VStack(alignment: .leading, spacing: 24) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(drop.brand)
-                                .font(.bodyFont(13, weight: .semibold))
-                                .foregroundColor(theme.primary)
-                            Text(drop.title)
-                                .font(.display(28, weight: .bold))
-                                .foregroundColor(theme.text)
-                                .tracking(-0.6)
-                            Text(drop.description)
-                                .font(.bodyFont(15))
-                                .foregroundColor(theme.textMuted)
-                                .lineSpacing(3)
-                        }
-
-                        if !drop.isRemoteOpportunity {
-                            factsGrid
-                        }
-
-                        section(drop.isRemoteOpportunity ? "How it works" : "What you’ll do") {
-                            VStack(alignment: .leading, spacing: 12) {
-                                ForEach(Array(drop.instructions.enumerated()), id: \.offset) { i, step in
-                                    HStack(alignment: .top, spacing: 12) {
-                                        Text("\(i + 1)")
-                                            .font(.bodyFont(12, weight: .bold))
-                                            .foregroundColor(.white)
-                                            .frame(width: 24, height: 24)
-                                            .background(Circle().fill(theme.primary))
-                                        Text(step)
-                                            .font(.bodyFont(14))
-                                            .foregroundColor(theme.text)
-                                    }
-                                }
-                            }
-                        }
-
-                        if !drop.isRemoteOpportunity {
-                            section("Proof required") {
-                                VStack(alignment: .leading, spacing: 10) {
-                                    ForEach(drop.proofRequirements) { req in
-                                        Label(req.label, systemImage: icon(for: req.kind))
-                                            .font(.bodyFont(14, weight: .medium))
-                                            .foregroundColor(theme.text)
-                                    }
-                                }
-                            }
-                        }
-
-                        HStack(spacing: 8) {
-                            ForEach(drop.eligibilityTags, id: \.self) { tag in
-                                MetadataTag(label: tag, theme: theme)
-                            }
-                        }
-
-                        Color.clear.frame(height: 120)
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 22)
-                    .padding(.bottom, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(theme.bg)
-                    .clipShape(
-                        UnevenRoundedRectangle(
-                            topLeadingRadius: 24,
-                            bottomLeadingRadius: 0,
-                            bottomTrailingRadius: 0,
-                            topTrailingRadius: 24,
-                            style: .continuous
-                        )
-                    )
-                    .offset(y: -18)
+            if let drop = state.opportunity(id: opportunityID) {
+                CLScrollView(theme: theme, bottomFade: 0) {
+                    detail(drop)
                 }
-            }
-            .contentMargins(.top, 0, for: .scrollContent)
-            .contentMargins(.top, 0, for: .scrollIndicators)
-
-            bottomBar
-        }
-        // Brand under the status bar only while this screen is visible — no window overlay
-        // (the old key-window strip leaked onto every tab after leaving detail).
-        .background {
-            VStack(spacing: 0) {
-                drop.brandColor
-                    .frame(height: topInset)
-                    .frame(maxWidth: .infinity)
-                theme.bg
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .ignoresSafeArea()
-        }
-        .toolbar(.hidden, for: .navigationBar)
-        .toolbarBackground(.hidden, for: .navigationBar)
-        .navigationBarBackButtonHidden(true)
-    }
-
-    private var hero: some View {
-        let height = 236 + topInset
-        return ZStack(alignment: .top) {
-            // Flat brand wash — no soft blur halo
-            Rectangle()
-                .fill(drop.brandColor)
-
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        // Keep the status-bar band pure brand color so it doesn't seam
-                        // against the chrome strip NavigationStack leaves above content.
-                        stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: .clear, location: 0.42),
-                            .init(color: Color.black.opacity(0.45), location: 1)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-
-            heroBrandMark
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                .padding(.trailing, 22)
-                .padding(.bottom, 78)
-
-            VStack(spacing: 0) {
-                HStack {
-                    Button { state.pop() } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(width: 40, height: 40)
-                            .background(Circle().fill(Color.black.opacity(0.28)))
-                    }
-                    .buttonStyle(CLPressStyle())
-
-                    Spacer()
-
-                    ShareLink(item: AppState.shareURL(path: "drops/\(drop.id)")) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(width: 40, height: 40)
-                            .background(Circle().fill(Color.black.opacity(0.28)))
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, topInset + 10)
-
-                Spacer(minLength: 0)
-
-                HStack(alignment: .bottom) {
-                    Text(drop.payoutLabel)
-                        .font(.display(36, weight: .bold))
-                        .tracking(-0.8)
-                        .foregroundColor(.white)
-
-                    Spacer(minLength: 12)
-
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Label(drop.timeLeftLabel, systemImage: "clock")
-                            .font(.display(13, weight: .semibold))
-                            .foregroundColor(.white)
-                        Text(drop.spotsLabel)
-                            .font(.bodyFont(12, weight: .medium))
-                            .foregroundColor(.white.opacity(0.8))
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 36)
-            }
-        }
-        .frame(height: height)
-        .frame(maxWidth: .infinity)
-    }
-
-    private var heroBrandMark: some View {
-        Group {
-            if let urlStr = drop.logoUrl, let url = URL(string: urlStr) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFit()
-                            .padding(16)
-                    default:
-                        Text(drop.initials)
-                            .font(.display(22, weight: .bold))
-                            .foregroundColor(drop.brandColor)
-                    }
-                }
+                bottomBar(drop)
             } else {
-                Text(drop.initials)
-                    .font(.display(22, weight: .bold))
-                    .foregroundColor(drop.brandColor)
+                CLEmptyState(
+                    icon: "briefcase",
+                    title: "Drop unavailable",
+                    subtitle: "This Drop may have closed or been removed.",
+                    actionLabel: "Go back",
+                    action: { state.pop() },
+                    theme: theme
+                )
+                .padding(.horizontal, 20)
+                .padding(.top, 40)
+                Spacer()
             }
         }
-        .frame(width: 72, height: 72)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white)
+        .background(theme.bg.ignoresSafeArea())
+    }
+
+    private var shareButton: AnyView? {
+        guard state.sessionToken != AuthStore.simulatorPreviewToken,
+              let drop = state.opportunity(id: opportunityID),
+              let url = drop.webProofURL else { return nil }
+        return AnyView(
+            ShareLink(item: url) {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(theme.text)
+                    .frame(width: 42, height: 42)
+                    .background(theme.surfaceAlt, in: Circle())
+            }
+            .accessibilityLabel("Share Drop")
         )
-        .accessibilityHidden(true)
     }
 
-    private var factsGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-            fact("Time", value: "~\(drop.estimatedMinutes) min")
-            fact("Window", value: claimWindowLabel)
-            fact("Campus", value: drop.schoolLabel)
-            fact("Category", value: drop.category.rawValue)
+    private func detail(_ drop: CampusDrop) -> some View {
+        VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    OpportunityBrandMark(drop: drop)
+                    Text(drop.brand)
+                        .font(.bodyFont(14, weight: .semibold))
+                        .foregroundColor(theme.textMuted)
+                    Spacer(minLength: 0)
+                    MetadataTag(label: drop.payoutLabel, color: theme.primary, theme: theme)
+                }
+                Text(drop.title)
+                    .font(.display(30, weight: .black))
+                    .foregroundColor(theme.text)
+                    .accessibilityAddTraits(.isHeader)
+                HStack(spacing: 8) {
+                    MetadataTag(label: drop.category.rawValue, theme: theme)
+                    if drop.hasApplied {
+                        MetadataTag(label: "Claimed", color: theme.success, theme: theme)
+                    }
+                }
+            }
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                factCell("Payout", value: drop.payoutLabel)
+                factCell("Deadline", value: drop.deadlineLabel ?? "—")
+                factCell("Spots", value: drop.spotsLabel)
+                factCell("Type", value: drop.category.rawValue)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                sectionTitle("About this Drop")
+                Text(drop.description)
+                    .font(.bodyFont(15))
+                    .foregroundColor(theme.textMuted)
+                    .lineSpacing(3)
+            }
+
+            if !drop.instructions.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    sectionTitle("What you need to do")
+                    ForEach(Array(drop.instructions.enumerated()), id: \.offset) { _, step in
+                        Label(step, systemImage: "smallcircle.filled.circle")
+                            .font(.bodyFont(14))
+                            .foregroundColor(theme.textMuted)
+                    }
+                    if let taskURL = drop.taskLinkURL {
+                        Link(destination: taskURL) {
+                            Text(drop.category.taskUrlButtonLabel)
+                                .font(.bodyFont(15, weight: .bold))
+                                .foregroundColor(theme.primary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(
+                                    RoundedRectangle(cornerRadius: theme.radiusMd, style: .continuous)
+                                        .strokeBorder(theme.primary.opacity(0.35), lineWidth: 1.5)
+                                )
+                        }
+                        .padding(.top, 4)
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(theme.surfaceAlt, in: RoundedRectangle(cornerRadius: theme.radiusLg))
+            }
+
+            if !drop.proofRequirements.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    sectionTitle("Proof required")
+                    ForEach(drop.proofRequirements) { req in
+                        Text(req.label)
+                            .font(.bodyFont(15))
+                            .foregroundColor(theme.textMuted)
+                    }
+                    if let deadline = drop.deadlineLabel {
+                        Text("Deadline \(deadline)")
+                            .font(.bodyFont(12, weight: .semibold))
+                            .foregroundColor(theme.textFaint)
+                            .padding(.top, 4)
+                    }
+                }
+            }
+
+            if drop.hasApplied {
+                VStack(alignment: .leading, spacing: 8) {
+                    sectionTitle("Next step")
+                    Text(drop.applyNote ?? "Submit proof on CampusLink so the brand can review and pay you.")
+                        .font(.bodyFont(15))
+                        .foregroundColor(theme.textMuted)
+                    if let proofURL = drop.webProofURL {
+                        Link(destination: proofURL) {
+                            Label("Submit proof on CampusLink", systemImage: "arrow.up.right")
+                                .font(.bodyFont(14, weight: .semibold))
+                                .foregroundColor(theme.primary)
+                        }
+                    }
+                }
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(20)
     }
 
-    private var claimWindowLabel: String {
-        let h = Int(drop.completionWindowSeconds / 3600)
-        if h >= 24 { return "\(h / 24)d after accept" }
-        if h >= 1 { return "\(h)h after accept" }
-        return "\(Int(drop.completionWindowSeconds / 60))m after accept"
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.display(17, weight: .bold))
+            .foregroundColor(theme.text)
+            .accessibilityAddTraits(.isHeader)
     }
 
-    private func fact(_ label: String, value: String) -> some View {
+    private func factCell(_ title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(label.uppercased())
+            Text(title.uppercased())
                 .font(.eyebrow(10))
-                .tracking(0.6)
-                .foregroundColor(theme.textMuted)
+                .foregroundColor(theme.textFaint)
             Text(value)
-                .font(.display(14, weight: .semibold))
+                .font(.bodyFont(14, weight: .semibold))
                 .foregroundColor(theme.text)
                 .lineLimit(2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .stickerOutline(fill: theme.surface, ink: theme.ink, cornerRadius: 14, borderWidth: theme.borderThinWidth)
+        .padding(12)
+        .background(theme.surfaceAlt, in: RoundedRectangle(cornerRadius: theme.radiusMd))
     }
 
-    private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(.display(17, weight: .bold))
-                .foregroundColor(theme.text)
-            content()
-        }
-    }
-
-    private func icon(for kind: ProofRequirement.Kind) -> String {
-        switch kind {
-        case .screenshot: return "camera"
-        case .link: return "link"
-        case .text: return "text.alignleft"
-        case .receipt: return "doc.text"
-        }
-    }
-
-    private var bottomBar: some View {
+    @ViewBuilder
+    private func bottomBar(_ drop: CampusDrop) -> some View {
         Group {
-            if drop.isRemoteOpportunity {
-                if drop.hasApplied {
-                    CLButton(label: "Applied", kind: .surface, size: .lg, full: true, theme: theme) {
-                        state.setTab(.active)
-                    }
-                } else if state.isEligible(drop) {
-                    CLButton(label: "Apply", kind: .primary, size: .lg, full: true, theme: theme) {
-                        haptic(.medium)
-                        state.acceptDrop(id: drop.id)
-                    }
-                } else {
-                    CLButton(label: "Not eligible", kind: .surface, size: .lg, full: true, theme: theme) {}
-                        .disabled(true)
-                }
-            } else if let claim = existingClaim {
-                if claim.status == .claimed {
-                    CLButton(label: "Continue — submit proof", kind: .primary, size: .lg, full: true, theme: theme) {
-                        state.push(.proofSubmit, id: claim.id)
-                    }
-                } else {
-                    CLButton(label: "View in Active", kind: .primary, size: .lg, full: true, theme: theme) {
-                        state.setTab(.active)
+            if drop.hasApplied {
+                VStack(spacing: 10) {
+                    Label("Claimed", systemImage: "checkmark.circle.fill")
+                        .font(.bodyFont(15, weight: .semibold))
+                        .foregroundColor(theme.success)
+                        .accessibilityIdentifier("claim-status")
+                    if let proofURL = drop.webProofURL {
+                        Link(destination: proofURL) {
+                            Text("Submit proof")
+                                .font(.display(16, weight: .bold))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(RoundedRectangle(cornerRadius: 10).fill(theme.primary))
+                        }
                     }
                 }
+            } else if !drop.isLive {
+                Text("This Drop is closed")
+                    .font(.bodyFont(15, weight: .semibold))
+                    .foregroundColor(theme.textMuted)
             } else if state.isEligible(drop) {
-                CLButton(label: "Accept Drop", kind: .primary, size: .lg, full: true, theme: theme) {
+                CLButton(
+                    label: state.applyingOpportunityID == drop.id ? "Claiming…" : "Claim",
+                    kind: .primary,
+                    size: .lg,
+                    full: true,
+                    theme: theme
+                ) {
                     haptic(.medium)
-                    state.acceptDrop(id: drop.id)
+                    Task { await state.applyToOpportunity(id: drop.id) }
                 }
+                .disabled(state.applyingOpportunityID != nil)
             } else {
-                CLButton(label: "Not eligible", kind: .surface, size: .lg, full: true, theme: theme) {}
-                    .disabled(true)
+                Text("This Drop isn’t available to your profile.")
+                    .font(.bodyFont(15, weight: .semibold))
+                    .foregroundColor(theme.textMuted)
             }
         }
+        .frame(maxWidth: .infinity, minHeight: 52)
         .padding(.horizontal, 20)
-        .padding(.top, 12)
-        .padding(.bottom, 28)
-        .frame(maxWidth: .infinity)
-        .background(theme.bg.ignoresSafeArea(edges: .bottom))
+        .padding(.vertical, 10)
+        .background(theme.bg)
     }
 }
-

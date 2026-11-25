@@ -185,7 +185,7 @@ struct OnRoleView: View {
                         .font(.display(34, weight: .bold))
                         .foregroundColor(theme.text)
                         .tracking(-1.2)
-                    Text("Students and campus orgs both earn from opportunities. Your feed adapts to your role.")
+                    Text("Students and campus orgs both earn from Drops. Your feed adapts to your role.")
                         .font(.bodyFont(15))
                         .foregroundColor(theme.textMuted)
                         .padding(.top, 10)

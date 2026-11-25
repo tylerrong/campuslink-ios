@@ -180,10 +180,8 @@ struct MainApp: View {
     @ViewBuilder
     private func routeScreen(_ route: AppRoute) -> some View {
         switch route.screen {
-        case .dropDetail: DropDetailScreen(state: state, theme: theme)
+        case .dropDetail: DropDetailScreen(state: state, opportunityID: route.id, theme: theme)
         case .proofSubmit: ProofSubmitScreen(state: state, theme: theme)
-        case .notifications: NotificationsScreen(state: state, theme: theme)
-        case .verification: VerificationScreen(state: state, theme: theme)
         case .editProfile: EditProfileScreen(state: state, theme: theme)
         case .payoutSettings: PayoutSettingsScreen(state: state, theme: theme)
         case .cashOut: CashOutScreen(state: state, theme: theme)

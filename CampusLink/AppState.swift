@@ -5,7 +5,7 @@ import Observation
 enum AppTab: Hashable { case drops, active, earnings, you }
 
 enum AppScreen: Hashable {
-    case dropDetail, proofSubmit, notifications, verification, editProfile, payoutSettings, cashOut
+    case dropDetail, proofSubmit, editProfile, payoutSettings, cashOut
 }
 
 struct AppRoute: Hashable {
@@ -61,10 +61,23 @@ class AppState {
     var avatarImageData: Data? = nil
     var eduEmail: String = ""
     var verificationStatus: VerificationStatus = .unverified
-    var notificationsEnabled: Bool = true
-    var dropAlertsEnabled: Bool = true
-    var payoutAlertsEnabled: Bool = true
+    private static let notificationsKey = "campuslink.alerts.enabled"
+    private static let dropAlertsKey = "campuslink.alerts.drops"
+    private static let payoutAlertsKey = "campuslink.alerts.payouts"
+
+    var notificationsEnabled = UserDefaults.standard.object(forKey: notificationsKey) as? Bool ?? true {
+        didSet { UserDefaults.standard.set(notificationsEnabled, forKey: Self.notificationsKey) }
+    }
+    var dropAlertsEnabled = UserDefaults.standard.object(forKey: dropAlertsKey) as? Bool ?? true {
+        didSet { UserDefaults.standard.set(dropAlertsEnabled, forKey: Self.dropAlertsKey) }
+    }
+    var payoutAlertsEnabled = UserDefaults.standard.object(forKey: payoutAlertsKey) as? Bool ?? true {
+        didSet { UserDefaults.standard.set(payoutAlertsEnabled, forKey: Self.payoutAlertsKey) }
+    }
     var payoutMethodLabel: String = "Add debit card"
+    var canPreviewCashOut: Bool {
+        sessionToken == AuthStore.simulatorPreviewToken && payableBalanceCents >= Self.cashOutMinimumCents
+    }
 
     // MARK: Catalog + activity
     /// Live opportunities from joincampuslink.com (empty until signed in).
@@ -76,6 +89,24 @@ class AppState {
     var appliedOpportunities: [CampusDrop] = []
     var isLoadingFeed = false
     var feedError: String = ""
+    private(set) var isLoadingApplications = false
+    private(set) var applicationsError = ""
+    private(set) var applyingOpportunityID: String?
+    private var applicationsRevision = 0
+    private var applicationDates: [String: Date] = [:]
+
+    var weeklyApplicationCount: Int {
+        let now = Date()
+        return applicationDates.values.filter {
+            Calendar.current.isDate($0, equalTo: now, toGranularity: .weekOfYear)
+        }.count
+    }
+
+    private var applicationDatesKey: String? {
+        guard let userID = remoteUser?.id, let sessionToken,
+              sessionToken != AuthStore.simulatorPreviewToken else { return nil }
+        return "campuslink.applications.weekly.\(userID)"
+    }
 
     // MARK: Session (mirrored from AuthStore)
     var sessionToken: String?
@@ -86,7 +117,6 @@ class AppState {
     // MARK: Navigation
     var currentTab: AppTab = .drops
     var navigationPath: [AppRoute] = []
-    var feedFilter: String = "all" // all | appInstall | survey | socialPost | orgs
 
     // MARK: Toast
     var toastMessage: String = ""
@@ -123,7 +153,16 @@ class AppState {
         appliedOpportunities = []
         claims = []
         submissions = []
+        ledger = []
+        notifications = []
+        payoutMethodLabel = "Add debit card"
+        applicationDates = [:]
         feedError = ""
+        isLoadingFeed = false
+        isLoadingApplications = false
+        applicationsError = ""
+        applyingOpportunityID = nil
+        applicationsRevision += 1
         clearProfileFields()
     }
 
@@ -155,8 +194,15 @@ class AppState {
     }
 
     func syncSession(token: String?, user: RemoteUser?) {
+        if sessionToken != nil && sessionToken != token { logOut() }
+        let sessionChanged = sessionToken != token || remoteUser?.id != user?.id
         sessionToken = token
         remoteUser = user
+        if sessionChanged {
+            applicationDates = applicationDatesKey.flatMap {
+                UserDefaults.standard.dictionary(forKey: $0) as? [String: Date]
+            } ?? [:]
+        }
         guard let user else {
             clearProfileFields()
             return
@@ -249,11 +295,13 @@ class AppState {
     /// Seed local sample drops when browsing without a real session (Simulator preview).
     @MainActor
     func loadSimulatorPreviewCatalog() {
+#if targetEnvironment(simulator)
         if drops.isEmpty {
-            drops = makeSampleDrops()
+            drops = makePreviewOpportunities()
         }
         feedError = ""
         isLoadingFeed = false
+#endif
     }
 
     @MainActor
@@ -261,9 +309,11 @@ class AppState {
         guard let token = sessionToken, token != AuthStore.simulatorPreviewToken else { return }
         do {
             let me = try await APIClient.shared.fetchMe(token: token)
+            guard sessionToken == token, !Task.isCancelled else { return }
             remoteUser = me
             applyRemoteProfile(me)
         } catch {
+            guard sessionToken == token, !Task.isCancelled else { return }
             if isUnauthorized(error) {
                 handleSessionExpired()
             }
@@ -277,38 +327,68 @@ class AppState {
             loadSimulatorPreviewCatalog()
             return
         }
+        guard !isLoadingFeed else { return }
         isLoadingFeed = true
         feedError = ""
-        defer { isLoadingFeed = false }
+        defer {
+            if sessionToken == token { isLoadingFeed = false }
+        }
         do {
             let remote = try await APIClient.shared.fetchOpportunities(token: token)
-            drops = remote.map { CampusDrop.fromOpportunity($0) }
+            guard sessionToken == token, !Task.isCancelled else { return }
+            let appliedIDs = Set(appliedOpportunities.map(\.id))
+            drops = remote
+                .filter { opp in
+                    // Prefer Drop rows; omit partnership offers if the API ever mixes them.
+                    guard let type = opp.offer_type?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                          !type.isEmpty else { return true }
+                    return type == "drop"
+                }
+                .map {
+                    var drop = CampusDrop.fromOpportunity($0)
+                    drop.hasApplied = drop.hasApplied || appliedIDs.contains(drop.id)
+                    return drop
+                }
         } catch {
+            guard sessionToken == token, !Task.isCancelled else { return }
             if isUnauthorized(error) {
-                feedError = "Session expired. Sign in again."
                 handleSessionExpired()
             } else {
-                feedError = error.localizedDescription
-                if drops.isEmpty {
-                    showToast(feedError, icon: "xmark")
-                }
+                feedError = "Check your connection and try again."
             }
         }
     }
 
     @MainActor
     func refreshApplied() async {
-        guard let token = sessionToken, token != AuthStore.simulatorPreviewToken else { return }
+        guard let token = sessionToken, token != AuthStore.simulatorPreviewToken,
+              !isLoadingApplications else { return }
+        let revision = applicationsRevision
+        isLoadingApplications = true
+        applicationsError = ""
+        defer {
+            if sessionToken == token { isLoadingApplications = false }
+        }
         do {
             let remote = try await APIClient.shared.fetchApplied(token: token)
-            appliedOpportunities = remote.map { CampusDrop.fromOpportunity($0) }
-            let appliedIds = Set(appliedOpportunities.map(\.id))
-            for i in drops.indices where appliedIds.contains(drops[i].id) {
+            guard sessionToken == token, !Task.isCancelled, revision == applicationsRevision else { return }
+            appliedOpportunities = remote
+                .filter { opp in
+                    guard let type = opp.offer_type?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                          !type.isEmpty else { return true }
+                    return type == "drop"
+                }
+                .map(CampusDrop.fromOpportunity)
+            let appliedIDs = Set(appliedOpportunities.map(\.id))
+            for i in drops.indices where appliedIDs.contains(drops[i].id) {
                 drops[i].hasApplied = true
             }
         } catch {
+            guard sessionToken == token, !Task.isCancelled else { return }
             if isUnauthorized(error) {
                 handleSessionExpired()
+            } else if revision == applicationsRevision {
+                applicationsError = "Check your connection and try again."
             }
         }
     }
@@ -327,29 +407,61 @@ class AppState {
 
     @MainActor
     func applyToOpportunity(id: String) async {
+        guard applyingOpportunityID == nil,
+              var drop = drop(id: id), !drop.hasApplied, isEligible(drop) else { return }
         guard let token = sessionToken else {
-            showToast("Sign in to apply", icon: "xmark")
+            showToast("Sign in to claim", icon: "xmark")
             return
         }
+        let submittedFrom = currentRoute
+        applyingOpportunityID = id
+        defer {
+            if sessionToken == token { applyingOpportunityID = nil }
+        }
         do {
-            try await APIClient.shared.apply(opportunityId: id, token: token)
-            if let idx = drops.firstIndex(where: { $0.id == id }) {
-                drops[idx].hasApplied = true
+            let isNewClaim: Bool
+            if token == AuthStore.simulatorPreviewToken {
+                isNewClaim = true
+            } else {
+                isNewClaim = try await APIClient.shared.apply(opportunityId: id, token: token)
             }
-            showToast("Applied", icon: "checkmark")
-            await refreshApplied()
-            pop()
-            setTab(.active)
+            guard sessionToken == token else { return }
+            if isNewClaim { recordApplication(id: id) }
+            applicationsRevision += 1
+            applicationsError = ""
+            drop.hasApplied = true
+            if let index = drops.firstIndex(where: { $0.id == id }) {
+                drops[index].hasApplied = true
+            }
+            if !appliedOpportunities.contains(where: { $0.id == id }) {
+                appliedOpportunities.insert(drop, at: 0)
+            }
+            showToast(isNewClaim ? "Drop claimed" : "Already claimed", icon: "checkmark")
+            if submittedFrom == AppRoute(.dropDetail, id: id), currentRoute == submittedFrom {
+                setTab(.active)
+            }
         } catch {
+            guard sessionToken == token else { return }
             if isUnauthorized(error) {
                 handleSessionExpired()
-                showToast("Session expired. Sign in again.", icon: "xmark")
             } else if let err = error as? APIError, case .registrationRequired(let url) = err {
                 showToast(err.localizedDescription ?? "Finish your profile", icon: "xmark")
                 if let url { await UIApplication.shared.open(url) }
             } else {
                 showToast(error.localizedDescription, icon: "xmark")
             }
+        }
+    }
+
+    private func recordApplication(id: String) {
+        let now = Date()
+        let calendar = Calendar.current
+        applicationDates = applicationDates.filter {
+            calendar.isDate($0.value, equalTo: now, toGranularity: .weekOfYear)
+        }
+        applicationDates[id] = now
+        if let key = applicationDatesKey {
+            UserDefaults.standard.set(applicationDates, forKey: key)
         }
     }
 
@@ -415,7 +527,9 @@ class AppState {
     func submission(forClaimId claimId: String) -> DropSubmission? {
         submissions.first { $0.claimId == claimId }
     }
-    var detailDrop: CampusDrop? { drop(id: detailId) ?? drops.first }
+    func opportunity(id: String) -> CampusDrop? {
+        appliedOpportunities.first { $0.id == id } ?? drop(id: id)
+    }
 
     // MARK: Eligibility + ranking
     func isEligible(_ drop: CampusDrop) -> Bool {
@@ -428,28 +542,15 @@ class AppState {
         }
     }
 
-    func rankedDrops(filter: String? = nil) -> [CampusDrop] {
-        let f = (filter ?? feedFilter).lowercased()
-        var list = drops.filter { isEligible($0) }
-        switch f {
-        case "appinstall", "app":
-            list = list.filter { $0.category == .appInstall }
-        case "survey":
-            list = list.filter { $0.category == .survey }
-        case "socialpost", "social":
-            list = list.filter { $0.category == .socialPost }
-        case "orgs":
-            list = list.filter { $0.audience == .orgs || $0.audience == .both }
-        default:
-            break
-        }
-        return list.sorted { dropScore($0) > dropScore($1) }
+    func rankedDrops(filter: DropFeedFilter = .all) -> [CampusDrop] {
+        drops.filter { isEligible($0) && filter.matches($0) }
+            .sorted { dropScore($0) > dropScore($1) }
     }
 
     private func dropScore(_ drop: CampusDrop) -> Int {
         var score = drop.payoutCents / 100
-        score += max(0, 48 - Int(drop.endAt.timeIntervalSinceNow / 3600))
-        if drop.remainingSlots < 20 { score += 15 }
+        if drop.endAt != .distantFuture { score += max(0, 48 - Int(drop.endAt.timeIntervalSinceNow / 3600)) }
+        if !drop.isRemoteOpportunity && drop.remainingSlots < 20 { score += 15 }
         if profileKind == .student {
             for interest in interests {
                 let hay = "\(drop.title) \(drop.description) \(drop.brand) \(drop.category.rawValue)".lowercased()
@@ -697,6 +798,8 @@ class AppState {
     }
 
     func pushNotification(kind: AppNotificationKind, title: String, body: String, dropId: String?) {
+        guard notificationsEnabled,
+              (kind == .payout ? payoutAlertsEnabled : dropAlertsEnabled) else { return }
         notifications.insert(
             AppNotification(
                 id: "n-\(UUID().uuidString.prefix(8))",

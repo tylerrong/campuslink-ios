@@ -128,7 +128,7 @@ struct SignInView: View {
 
                 Spacer()
 
-                Text("Brands: manage opportunities at joincampuslink.com")
+                Text("Brands: post Drops at joincampuslink.com")
                     .font(.bodyFont(12))
                     .foregroundColor(theme.textMuted)
                     .padding(.bottom, 28)

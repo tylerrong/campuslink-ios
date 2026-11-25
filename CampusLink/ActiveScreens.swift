@@ -3,50 +3,50 @@ import PhotosUI
 import Combine
 import UIKit
 
-// MARK: - Active / Applied
+// MARK: - My Drops (claimed)
 struct ActiveDropsScreen: View {
     @Bindable var state: AppState
     let theme: CLTheme
     @State private var tick = Date()
 
-    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-
-    private var claims: [DropClaim] { state.activeClaims }
-    private var applied: [CampusDrop] { state.appliedOpportunities }
+    private var claimed: [CampusDrop] { state.appliedOpportunities }
 
     var body: some View {
-        CLScrollView(theme: theme, bottomFade: 40) {
-            VStack(alignment: .leading, spacing: 0) {
-                CLScreenHeader(
-                    title: "Active",
-                    subtitle: applied.isEmpty && claims.isEmpty
-                        ? "Apply to an opportunity to track it here."
-                        : "Your applications and in-progress work.",
-                    theme: theme
-                )
+        CLScrollView(theme: theme, bottomFade: 0) {
+            VStack(alignment: .leading, spacing: 16) {
+                CLScreenHeader(title: "My Drops", theme: theme)
 
-                if !applied.isEmpty {
-                    HStack(spacing: 12) {
-                        CLColorStatCard(
-                            title: "Applied",
-                            value: "\(applied.count)",
-                            detail: "opportunities",
-                            icon: "briefcase.fill",
-                            fill: theme.accentBlue,
-                            compact: true
-                        )
-                    }
+                if !state.applicationsError.isEmpty {
+                    CLEmptyState(
+                        icon: "wifi.slash",
+                        title: "Couldn’t refresh My Drops",
+                        subtitle: state.applicationsError,
+                        actionLabel: "Try again",
+                        action: { Task { await state.refreshApplied() } },
+                        theme: theme
+                    )
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 18)
+                }
 
-                    Text("Applied opportunities")
-                        .font(.display(17, weight: .bold))
-                        .foregroundColor(theme.text)
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 10)
-
-                    VStack(spacing: 12) {
-                        ForEach(applied) { drop in
+                if claimed.isEmpty {
+                    if state.isLoadingApplications {
+                        ProgressView("Loading claimed Drops")
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 40)
+                    } else if state.applicationsError.isEmpty {
+                        CLEmptyState(
+                            icon: "tray",
+                            title: "No claimed Drops yet",
+                            subtitle: "Claim a Drop to see it here.",
+                            actionLabel: "Browse Drops",
+                            action: { state.setTab(.drops) },
+                            theme: theme
+                        )
+                        .padding(.top, 32)
+                    }
+                } else {
+                    LazyVStack(spacing: 12) {
+                        ForEach(claimed) { drop in
                             AppliedOpportunityCard(
                                 drop: drop,
                                 theme: theme,
@@ -55,58 +55,15 @@ struct ActiveDropsScreen: View {
                         }
                     }
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 24)
                 }
-
-                if !claims.isEmpty {
-                    Text("In-progress Drops")
-                        .font(.display(17, weight: .bold))
-                        .foregroundColor(theme.text)
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 10)
-
-                    VStack(spacing: 12) {
-                        ForEach(claims) { claim in
-                            if let drop = state.drop(id: claim.dropId), !drop.isRemoteOpportunity {
-                                ActiveClaimCard(
-                                    claim: claim,
-                                    drop: drop,
-                                    submission: state.submission(forClaimId: claim.id),
-                                    timeLabel: state.claimTimeLabel(for: claim),
-                                    theme: theme,
-                                    onOpenDrop: { state.push(.dropDetail, id: drop.id) },
-                                    onSubmit: { state.push(.proofSubmit, id: claim.id) }
-                                )
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                }
-
-                if applied.isEmpty && claims.isEmpty {
-                    CLEmptyState(
-                        icon: "clock",
-                        title: "Nothing in progress",
-                        subtitle: "Apply to a brand opportunity on Discover. Brands follow up on CampusLink.",
-                        actionLabel: "Browse opportunities",
-                        action: { state.setTab(.drops) },
-                        theme: theme
-                    )
-                    .padding(.top, 48)
-                }
-
-                Color.clear.frame(height: 100)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 20)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.bg.ignoresSafeArea())
         .refreshable { await state.refreshApplied() }
-        .task { await state.refreshApplied() }
-        .onReceive(timer) { date in
-            guard state.currentTab == .active else { return }
-            tick = date
-            _ = state.expireStaleClaimsIfNeeded()
+        .task(id: state.currentTab) {
+            if state.currentTab == .active { await state.refreshApplied() }
         }
     }
 }
@@ -117,17 +74,10 @@ struct AppliedOpportunityCard: View {
     let onOpen: () -> Void
 
     var body: some View {
-        Button(action: onOpen) {
-            VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
+            Button(action: onOpen) {
                 HStack(spacing: 12) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(drop.brandColor.opacity(0.15))
-                        Text(drop.initials)
-                            .font(.display(14, weight: .bold))
-                            .foregroundColor(drop.brandColor)
-                    }
-                    .frame(width: 44, height: 44)
+                    OpportunityBrandMark(drop: drop)
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(drop.brand)
@@ -139,22 +89,39 @@ struct AppliedOpportunityCard: View {
                             .lineLimit(2)
                     }
                     Spacer(minLength: 8)
-                    Text("Applied")
-                        .font(.bodyFont(12, weight: .bold))
-                        .foregroundColor(theme.accentGreen)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Capsule().fill(theme.accentGreen.opacity(0.12)))
+                    VStack(alignment: .trailing, spacing: 6) {
+                        Text(drop.payoutLabel)
+                            .font(.bodyFont(12, weight: .bold))
+                            .foregroundColor(theme.primary)
+                        Text("Claimed")
+                            .font(.bodyFont(12, weight: .bold))
+                            .foregroundColor(theme.accentGreen)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Capsule().fill(theme.accentGreen.opacity(0.12)))
+                    }
                 }
-
-                Text("Waiting for the brand to follow up on CampusLink.")
-                    .font(.bodyFont(13))
-                    .foregroundColor(theme.textMuted)
             }
-            .padding(16)
-            .stickerOutline(fill: theme.surface, ink: theme.ink, cornerRadius: 16, borderWidth: theme.borderThinWidth)
+            .buttonStyle(CLPressStyle(scale: 0.985))
+            .accessibilityIdentifier("claimed-drop-\(drop.id)")
+
+            Text(drop.applyNote ?? "Submit proof on CampusLink so the brand can review and pay you.")
+                .font(.bodyFont(13))
+                .foregroundColor(theme.textMuted)
+
+            if let proofURL = drop.webProofURL {
+                Link(destination: proofURL) {
+                    Text("Submit proof")
+                        .font(.bodyFont(14, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(theme.primary))
+                }
+            }
         }
-        .buttonStyle(CLPressStyle(scale: 0.985))
+        .padding(16)
+        .stickerOutline(fill: theme.surface, ink: theme.ink, cornerRadius: 16, borderWidth: theme.borderThinWidth)
     }
 }
 

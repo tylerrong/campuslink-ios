@@ -113,10 +113,65 @@ struct Interest: Identifiable {
 
 // MARK: - Drops
 
+enum DropFeedFilter: String, CaseIterable, Identifiable {
+    case all = "All"
+    case appInstall = "App Install"
+    case social = "Social"
+    case survey = "Survey"
+    case referral = "Referral"
+    case review = "Review"
+    case checkIn = "Check-in"
+    case follow = "Follow"
+    case signup = "Sign-up"
+
+    var id: Self { self }
+
+    func matches(_ drop: CampusDrop) -> Bool {
+        switch self {
+        case .all: true
+        case .appInstall: drop.category == .appInstall
+        case .social: drop.category == .content || drop.category == .socialPost
+        case .survey: drop.category == .survey
+        case .referral: drop.category == .referral
+        case .review: drop.category == .review
+        case .checkIn: drop.category == .checkIn
+        case .follow: drop.category == .follow
+        case .signup: drop.category == .signup
+        }
+    }
+}
+
 enum DropCategory: String, CaseIterable, Identifiable {
-    case appInstall = "App install"
+    case appInstall = "App Install"
     case survey = "Survey"
     case socialPost = "Social post"
+    case referral = "Referral"
+    case review = "Review"
+    case checkIn = "Check-in"
+    case follow = "Follow"
+    case signup = "Sign-up"
+    case activation = "Campus activation"
+    case ambassador = "Ambassador"
+    case content = "Social"
+    case event = "Event partnership"
+    case other = "Other"
+
+    init(remoteValue: String?) {
+        switch remoteValue {
+        case "app_install": self = .appInstall
+        case "survey": self = .survey
+        case "content": self = .content
+        case "referral": self = .referral
+        case "review": self = .review
+        case "check_in": self = .checkIn
+        case "follow_social": self = .follow
+        case "signup": self = .signup
+        case "activation": self = .activation
+        case "ambassador": self = .ambassador
+        case "event": self = .event
+        default: self = .other
+        }
+    }
 
     var id: String { rawValue }
 
@@ -124,7 +179,31 @@ enum DropCategory: String, CaseIterable, Identifiable {
         switch self {
         case .appInstall: "arrow.down.app"
         case .survey: "list.bullet.clipboard"
-        case .socialPost: "camera"
+        case .socialPost, .content: "camera"
+        case .referral: "person.badge.plus"
+        case .review: "star"
+        case .checkIn: "mappin.and.ellipse"
+        case .follow: "heart"
+        case .signup: "person.crop.circle.badge.plus"
+        case .activation: "megaphone"
+        case .ambassador: "person.2"
+        case .event: "calendar"
+        case .other: "briefcase"
+        }
+    }
+
+    /// Safari / in-app button label for `task_url` (mirrors web Drop detail).
+    var taskUrlButtonLabel: String {
+        switch self {
+        case .appInstall: return "Open app link"
+        case .survey: return "Open survey"
+        case .referral: return "Open referral link"
+        case .review: return "Open review page"
+        case .follow: return "Open profile to follow"
+        case .signup: return "Open sign-up"
+        case .checkIn: return "Open location / event"
+        case .content, .socialPost: return "Open creative brief"
+        default: return "Open Drop link"
         }
     }
 
@@ -132,7 +211,9 @@ enum DropCategory: String, CaseIterable, Identifiable {
         switch self {
         case .appInstall: 10
         case .survey: 8
-        case .socialPost: 15
+        case .follow, .signup, .checkIn: 5
+        case .referral, .review: 10
+        case .socialPost, .activation, .ambassador, .content, .event, .other: 15
         }
     }
 }
@@ -176,9 +257,14 @@ struct CampusDrop: Identifiable, Hashable {
     let audience: AudienceFilter
     var status: DropStatus
     let estimatedMinutes: Int
-    /// True when this card is a joincampuslink.com opportunity (not a local mock Drop).
+    /// True when this card is a joincampuslink.com Drop (not a local mock).
     var isRemoteOpportunity: Bool
     var hasApplied: Bool
+    let compensationLabel: String?
+    let capacityHint: String?
+    let applyNote: String?
+    /// External Drop link (App Store, survey, etc.).
+    let taskUrl: String?
 
     init(
         id: String,
@@ -203,7 +289,11 @@ struct CampusDrop: Identifiable, Hashable {
         status: DropStatus,
         estimatedMinutes: Int,
         isRemoteOpportunity: Bool = false,
-        hasApplied: Bool = false
+        hasApplied: Bool = false,
+        compensationLabel: String? = nil,
+        capacityHint: String? = nil,
+        applyNote: String? = nil,
+        taskUrl: String? = nil
     ) {
         self.id = id
         self.brand = brand
@@ -228,18 +318,24 @@ struct CampusDrop: Identifiable, Hashable {
         self.estimatedMinutes = estimatedMinutes
         self.isRemoteOpportunity = isRemoteOpportunity
         self.hasApplied = hasApplied
+        self.compensationLabel = compensationLabel
+        self.capacityHint = capacityHint
+        self.applyNote = applyNote
+        self.taskUrl = taskUrl
     }
 
     var payoutLabel: String {
-        if isRemoteOpportunity { return "Apply" }
-        return payoutCents.dollarsCompact
+        if payoutCents > 0 { return payoutCents.dollarsCompact }
+        if let compensationLabel, !compensationLabel.isEmpty { return compensationLabel }
+        return "Payout TBD"
     }
 
     var isLive: Bool {
+        let open = status == .live && endAt > Date()
         if isRemoteOpportunity {
-            return status == .live && endAt > Date()
+            return open && (hasApplied || remainingSlots > 0)
         }
-        return status == .live && endAt > Date() && remainingSlots > 0
+        return open && remainingSlots > 0
     }
 
     var schoolLabel: String {
@@ -250,10 +346,38 @@ struct CampusDrop: Identifiable, Hashable {
     }
 
     var spotsLabel: String {
-        if isRemoteOpportunity {
-            return hasApplied ? "Applied" : "Open opportunity"
-        }
-        return "\(remainingSlots)/\(maxCompletions) spots left"
+        if hasApplied { return "Claimed" }
+        if remainingSlots <= 0 { return "Full" }
+        return remainingSlots == 1 ? "1 spot left" : "\(remainingSlots) spots left"
+    }
+
+    /// Submission deadline for display (API end date is inclusive UTC day).
+    var deadlineLabel: String? {
+        guard endAt != .distantFuture else { return nil }
+        let style = Date.FormatStyle(
+            date: .abbreviated, time: .omitted, timeZone: .gmt
+        )
+        return endAt.addingTimeInterval(-1).formatted(style)
+    }
+
+    /// Legacy alias used by older call sites.
+    var applicationDeadlineLabel: String? { deadlineLabel }
+
+    /// Blurb under the title on Discover cards (web uses action_description).
+    var cardBlurb: String {
+        if let first = instructions.first, !first.isEmpty { return first }
+        return description
+    }
+
+    /// Web proof URL after claim (`/offers/gigs/{id}`).
+    var webProofURL: URL? {
+        guard isRemoteOpportunity else { return nil }
+        return URL(string: "https://joincampuslink.com/offers/gigs/\(id)")
+    }
+
+    var taskLinkURL: URL? {
+        guard let taskUrl, let url = URL(string: taskUrl), url.scheme == "https" else { return nil }
+        return url
     }
 
     var timeLeftLabel: String {
