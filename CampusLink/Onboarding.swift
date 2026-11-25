@@ -1,7 +1,7 @@
 import SwiftUI
 
 // MARK: - Onboarding progress bar
-private struct ObProgress: View {
+struct ObProgress: View {
     let step: Int
     let total: Int
     let theme: CLTheme
@@ -30,7 +30,7 @@ private struct ObProgress: View {
     }
 }
 
-private struct BackBtn: View {
+struct BackBtn: View {
     let theme: CLTheme
     let action: () -> Void
 
@@ -49,7 +49,7 @@ private struct BackBtn: View {
     }
 }
 
-private struct ObFooter: View {
+struct ObFooter: View {
     let theme: CLTheme
     let label: String
     var disabled: Bool = false
@@ -160,20 +160,32 @@ struct SplashView: View {
 struct OnRoleView: View {
     @Binding var profileKind: ProfileKind
     let theme: CLTheme
+    var totalSteps: Int = 3
+    var backLabel: String = "Sign out"
     let onNext: () -> Void
     let onBack: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
-            ObProgress(step: 1, total: 5, theme: theme)
+            ObProgress(step: 1, total: totalSteps, theme: theme)
             CLScrollView(theme: theme) {
                 VStack(alignment: .leading, spacing: 0) {
-                    BackBtn(theme: theme, action: onBack)
+                    Button(action: onBack) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 14, weight: .bold))
+                            Text(backLabel)
+                                .font(.display(13, weight: .bold))
+                        }
+                        .foregroundColor(theme.text)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.bottom, 14)
                     Text("Who are you\nhere as?")
                         .font(.display(34, weight: .bold))
                         .foregroundColor(theme.text)
                         .tracking(-1.2)
-                    Text("Students and campus orgs both earn from Drops. Your feed adapts to your role.")
+                    Text("Students and campus orgs both earn from opportunities. Your feed adapts to your role.")
                         .font(.bodyFont(15))
                         .foregroundColor(theme.textMuted)
                         .padding(.top, 10)

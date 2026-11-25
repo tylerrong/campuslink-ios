@@ -52,6 +52,33 @@ actor APIClient {
         return user
     }
 
+    func fetchSchools(token: String, query: String = "", limit: Int = 40) async throws -> [RemoteSchool] {
+        var path = "schools?limit=\(limit)"
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !q.isEmpty, let encoded = q.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+            path += "&q=\(encoded)"
+        }
+        let (data, status) = try await send(path: path, method: "GET", body: nil, authed: true, token: token)
+        if status == 401 { throw APIError.unauthorized }
+        try throwIfHTTPError(status: status, data: data)
+        let res = try JSONDecoder().decode(SchoolsResponse.self, from: data)
+        guard res.success else { throw APIError.message(res.error ?? "Could not load schools") }
+        return res.schools ?? []
+    }
+
+    func completeOnboarding(token: String, body: OnboardingRequest) async throws -> RemoteUser {
+        let encoded = try JSONEncoder().encode(body)
+        let (data, status) = try await send(path: "onboarding", method: "POST", body: encoded, authed: true, token: token)
+        if status == 401 { throw APIError.unauthorized }
+        try throwIfHTTPError(status: status, data: data)
+        let res = try JSONDecoder().decode(MeResponse.self, from: data)
+        guard res.success, let user = res.user else {
+            throw APIError.message(res.error ?? "Could not complete profile")
+        }
+        if user.isBrand { throw APIError.brandNotSupported }
+        return user
+    }
+
     func fetchOpportunities(token: String) async throws -> [RemoteOpportunity] {
         let (data, status) = try await send(path: "opportunities", method: "GET", body: nil, authed: true, token: token)
         if status == 401 { throw APIError.unauthorized }

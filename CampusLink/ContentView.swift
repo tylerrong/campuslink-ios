@@ -20,7 +20,7 @@ struct ContentView: View {
             } else if !auth.isSignedIn {
                 SignInView(auth: auth, theme: theme)
             } else if auth.needsWebOnboarding {
-                IncompleteProfileView(auth: auth, theme: theme)
+                OnboardingFlowView(auth: auth, theme: theme)
             } else {
                 MainApp(state: appState, auth: auth, theme: theme)
             }

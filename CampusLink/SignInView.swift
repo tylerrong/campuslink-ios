@@ -18,7 +18,7 @@ struct SignInView: View {
                     CLLogo(size: 36, tone: .black, style: .wordmark)
                         .accessibilityLabel("CampusLink")
 
-                    Text("Sign in with your joincampuslink.com account. Students and campus orgs only.")
+                    Text("Sign in or create an account — students and campus orgs only.")
                         .font(.bodyFont(15))
                         .foregroundColor(theme.textMuted)
                         .multilineTextAlignment(.center)
@@ -156,43 +156,3 @@ struct SignInView: View {
     }
 }
 
-struct IncompleteProfileView: View {
-    @Bindable var auth: AuthStore
-    let theme: CLTheme
-
-    var body: some View {
-        ZStack {
-            theme.bg.ignoresSafeArea()
-            VStack(spacing: 20) {
-                Spacer()
-                Text("Finish your profile")
-                    .font(.display(28, weight: .bold))
-                Text("Complete onboarding on joincampuslink.com, then return here. Use the same email to sign back in.")
-                    .font(.bodyFont(15))
-                    .foregroundColor(theme.textMuted)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 28)
-
-                if let url = URL(string: "\(AppState.webBaseURL)/onboarding") {
-                    Link(destination: url) {
-                        Text("Open joincampuslink.com")
-                            .font(.display(16, weight: .bold))
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(RoundedRectangle(cornerRadius: 10).fill(theme.primary))
-                    }
-                    .padding(.horizontal, 24)
-                }
-
-                Button("Sign out") {
-                    auth.signOut()
-                }
-                .font(.bodyFont(14, weight: .semibold))
-                .foregroundColor(theme.textMuted)
-
-                Spacer()
-            }
-        }
-    }
-}

@@ -204,6 +204,17 @@ final class AuthStore {
         }
     }
 
+    func completeOnboarding(_ body: OnboardingRequest) async throws {
+        guard let token = sessionToken, !isSimulatorPreview else {
+            throw APIError.message("Sign in again to finish your profile.")
+        }
+        isBusy = true
+        defer { isBusy = false }
+        let user = try await APIClient.shared.completeOnboarding(token: token, body: body)
+        self.user = user
+        authMessage = ""
+    }
+
     func signOut() {
         KeychainStore.clearToken()
         sessionToken = nil

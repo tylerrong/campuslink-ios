@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-struct RemoteSchool: Codable, Hashable {
+struct RemoteSchool: Codable, Hashable, Identifiable {
     let id: Int
     let name: String
     let short_name: String
@@ -226,6 +226,33 @@ struct MeResponse: Codable {
     let error: String?
 }
 
+struct SchoolsResponse: Codable {
+    let success: Bool
+    let schools: [RemoteSchool]?
+    let error: String?
+}
+
+struct OnboardingRequest: Encodable, Sendable {
+    var profile_type: String
+    var school: Int
+    var primary_phone: String
+    var instagram_handle: String
+    var terms_accepted: Bool
+    // Student
+    var full_name: String?
+    var graduation_year: Int?
+    var major: String?
+    var student_type: String?
+    var bio: String?
+    var linkedin_url: String?
+    var tiktok_handle: String?
+    // Org
+    var org_name: String?
+    var org_type: String?
+    var member_count: Int?
+    var website: String?
+}
+
 struct OpportunitiesResponse: Codable {
     let success: Bool
     let opportunities: [RemoteOpportunity]?
@@ -259,7 +286,7 @@ enum APIError: LocalizedError {
         case .brandNotSupported:
             return "Brand accounts manage opportunities on joincampuslink.com. This app is for students and campus orgs."
         case .unauthorized: return "Please sign in again."
-        case .registrationRequired: return "Finish setting up your profile on joincampuslink.com."
+        case .registrationRequired: return "Finish setting up your CampusLink profile."
         }
     }
 }
