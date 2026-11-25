@@ -210,9 +210,14 @@ final class AuthStore {
         }
         isBusy = true
         defer { isBusy = false }
-        let user = try await APIClient.shared.completeOnboarding(token: token, body: body)
-        self.user = user
-        authMessage = ""
+        let result = try await APIClient.shared.completeOnboarding(token: token, body: body)
+        // Prefer reminted JWT so subsequent /me and Apply see registration_completed.
+        if let newToken = result.token, !newToken.isEmpty {
+            await persist(token: newToken, user: result.user, refreshProfile: true)
+        } else {
+            self.user = result.user
+            authMessage = ""
+        }
     }
 
     func signOut() {

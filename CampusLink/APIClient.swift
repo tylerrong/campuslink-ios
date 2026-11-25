@@ -66,7 +66,7 @@ actor APIClient {
         return res.schools ?? []
     }
 
-    func completeOnboarding(token: String, body: OnboardingRequest) async throws -> RemoteUser {
+    func completeOnboarding(token: String, body: OnboardingRequest) async throws -> (token: String?, user: RemoteUser) {
         let encoded = try JSONEncoder().encode(body)
         let (data, status) = try await send(path: "onboarding", method: "POST", body: encoded, authed: true, token: token)
         if status == 401 { throw APIError.unauthorized }
@@ -76,7 +76,7 @@ actor APIClient {
             throw APIError.message(res.error ?? "Could not complete profile")
         }
         if user.isBrand { throw APIError.brandNotSupported }
-        return user
+        return (res.token, user)
     }
 
     func fetchOpportunities(token: String) async throws -> [RemoteOpportunity] {

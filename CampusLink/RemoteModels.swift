@@ -222,6 +222,8 @@ struct AuthSessionResponse: Codable {
 
 struct MeResponse: Codable {
     let success: Bool
+    /// Present after mobile onboarding remints the session JWT.
+    let token: String?
     let user: RemoteUser?
     let error: String?
 }
