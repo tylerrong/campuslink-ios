@@ -18,7 +18,7 @@ struct AppRoute: Hashable {
     }
 }
 
-/// One-shot haptic tap — call from any button action.
+/// One-shot haptic tap - call from any button action.
 func haptic(_ style: UIImpactFeedbackGenerator.FeedbackStyle = .medium) {
     UIImpactFeedbackGenerator(style: style).impactOccurred()
 }
@@ -116,7 +116,7 @@ class AppState {
     // MARK: Session (mirrored from AuthStore)
     var sessionToken: String?
     var remoteUser: RemoteUser?
-    /// Fired when an API call returns unauthorized — ContentView should sign out AuthStore.
+    /// Fired when an API call returns unauthorized - ContentView should sign out AuthStore.
     var onSessionExpired: (() -> Void)?
 
     // MARK: Navigation
@@ -449,7 +449,7 @@ class AppState {
             applicationsRevision += 1
             applicationsError = ""
             drop.hasApplied = true
-            // Claim creates a pending submission on the server — mirror that until refreshApplied.
+            // Claim creates a pending submission on the server - mirror that until refreshApplied.
             if drop.submissionStatus == nil {
                 drop.submissionStatus = "pending"
             }
@@ -553,7 +553,7 @@ class AppState {
             let note: String
             switch type {
             case .pending: note = "Proof under review"
-            case .payable: note = payouts.ready ? "Approved — payout pending" : "Approved — set up payouts to get paid"
+            case .payable: note = payouts.ready ? "Approved - payout pending" : "Approved - set up payouts to get paid"
             case .paid: note = "Paid out"
             case .reversed: note = "Rejected"
             }

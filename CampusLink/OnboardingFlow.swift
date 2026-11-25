@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Native campus onboarding — replaces IncompleteProfileView web bounce.
+/// Native campus onboarding - replaces IncompleteProfileView web bounce.
 struct OnboardingFlowView: View {
     @Bindable var auth: AuthStore
     let theme: CLTheme
@@ -90,7 +90,7 @@ struct OnboardingFlowView: View {
                         .font(.display(34, weight: .bold))
                         .foregroundColor(theme.text)
                         .tracking(-1.2)
-                    Text("Matched to your campus first — same profile as joincampuslink.com.")
+                    Text("Matched to your campus first. Same profile as joincampuslink.com.")
                         .font(.bodyFont(15))
                         .foregroundColor(theme.textMuted)
                         .padding(.top, 10)

@@ -289,7 +289,7 @@ struct DropsFeedScreen: View {
     }
 }
 
-// MARK: - Drop detail (brand-wash hero + sheet — Claim CTA)
+// MARK: - Drop detail (brand-wash hero + sheet - Claim CTA)
 struct DropDetailScreen: View {
     @Bindable var state: AppState
     let opportunityID: String
@@ -297,7 +297,7 @@ struct DropDetailScreen: View {
 
     private var drop: CampusDrop? { state.opportunity(id: opportunityID) }
 
-    /// Window safe-area top — NavStack won't give that strip to SwiftUI content.
+    /// Window safe-area top - NavStack won't give that strip to SwiftUI content.
     private var topInset: CGFloat {
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first

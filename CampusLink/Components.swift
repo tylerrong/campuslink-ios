@@ -8,7 +8,7 @@ enum CLLogoStyle { case mark, wordmark }
 
 struct CLLogo: View {
     var size: CGFloat = 28
-    /// Legacy tint hint — maps to the closest brand asset tone.
+    /// Legacy tint hint - maps to the closest brand asset tone.
     var color: Color = .white
     var tone: CLLogoTone? = nil
     var style: CLLogoStyle = .mark
@@ -148,7 +148,7 @@ struct CLButton: View {
     private var height: CGFloat { size == .sm ? 44 : size == .md ? 50 : 54 }
     private var hPad: CGFloat   { size == .sm ? 16 : size == .md ? 20 : 22 }
     private var fontSize: CGFloat { size == .sm ? 14 : size == .md ? 15 : 16 }
-    /// Soft rounded rect matching joincampuslink CTAs — not a capsule.
+    /// Soft rounded rect matching joincampuslink CTAs - not a capsule.
     private var corner: CGFloat { 10 }
 
     private var fgColor: Color {
@@ -248,7 +248,7 @@ struct CLChip: View {
     let label: String
     var selected: Bool = false
     var icon: String? = nil
-    /// Hugeicons asset — preferred over SF Symbol `icon` when set.
+    /// Hugeicons asset - preferred over SF Symbol `icon` when set.
     var hugeIcon: HugeiconsAsset? = nil
     /// When true with an icon, hide the text label (icon-only filter chips).
     var iconOnly: Bool = false

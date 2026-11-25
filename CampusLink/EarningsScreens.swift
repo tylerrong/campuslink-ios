@@ -14,7 +14,7 @@ struct EarningsScreen: View {
                     title: "Earnings",
                     subtitle: state.isLiveSession
                         ? "Drop payouts via Stripe Connect."
-                        : "Simulator preview — no real money moves.",
+                        : "Simulator preview. No real money moves.",
                     theme: theme
                 )
 
@@ -274,7 +274,7 @@ struct CashOutScreen: View {
                     Text(state.payableBalanceCents.dollarsFormatted)
                         .font(.display(44, weight: .bold))
                         .foregroundColor(theme.text)
-                    Text("Sending to \(state.payoutMethodLabel). Simulated transfer — no real money moves in this build.")
+                    Text("Sending to \(state.payoutMethodLabel). Simulated transfer. No real money moves in this build.")
                         .font(.bodyFont(15))
                         .foregroundColor(theme.textMuted)
 
@@ -635,7 +635,7 @@ struct EditProfileScreen: View {
                 .font(.eyebrow(11))
                 .textCase(.uppercase)
                 .foregroundColor(theme.textMuted)
-            Text(display.isEmpty ? "—" : display)
+            Text(display.isEmpty ? "-" : display)
                 .font(.bodyFont(16))
                 .foregroundColor(display.isEmpty ? theme.textFaint : theme.text)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -755,7 +755,7 @@ struct PayoutSettingsScreen: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .stickerCard(fill: theme.card, ink: theme.ink, cornerRadius: theme.radiusLg, shadow: theme.shadowSm, borderWidth: 0)
 
-                    Text("CampusLink uses Stripe Connect for Drop payouts. Set up or manage your bank account on the web — then return here to track earnings.")
+                    Text("CampusLink uses Stripe Connect for Drop payouts. Set up or manage your bank account on the web, then return here to track earnings.")
                         .font(.bodyFont(14))
                         .foregroundColor(theme.textMuted)
                         .fixedSize(horizontal: false, vertical: true)

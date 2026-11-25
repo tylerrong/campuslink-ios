@@ -18,7 +18,7 @@ struct SignInView: View {
                     CLLogo(size: 36, tone: .black, style: .wordmark)
                         .accessibilityLabel("CampusLink")
 
-                    Text("Sign in or create an account — students and campus orgs only.")
+                    Text("Sign in or create an account. Students and campus orgs only.")
                         .font(.bodyFont(15))
                         .foregroundColor(theme.textMuted)
                         .multilineTextAlignment(.center)

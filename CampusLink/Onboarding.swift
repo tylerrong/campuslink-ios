@@ -114,7 +114,7 @@ struct OnRoleView: View {
                     roleCard(
                         kind: .student,
                         title: "Student",
-                        subtitle: "Claim Drops for yourself — installs, surveys, social proof.",
+                        subtitle: "Claim Drops for yourself: installs, surveys, social proof.",
                         icon: "person.fill"
                     )
                     .padding(.bottom, 12)

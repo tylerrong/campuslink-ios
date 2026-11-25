@@ -29,12 +29,11 @@ final class AuthStore {
 
     init() {
 #if targetEnvironment(simulator)
-        // Simulator opens straight into a local preview account so UI can be reviewed
-        // without magic-link/Google. Device builds always restore a real session.
-        // Tap Log out → “Preview app (Simulator)” (or sign in for real) to change.
-        isSimulatorPreview = true
-        sessionToken = Self.simulatorPreviewToken
-        user = .simulatorPreview()
+        // Simulator starts signed out so Welcome → Sign in can be reviewed.
+        // Use “Preview app (Simulator)” on SignInView to skip into the main shell.
+        isSimulatorPreview = false
+        sessionToken = nil
+        user = nil
         isRestoring = false
 #else
         Task { await restoreSession() }
@@ -94,7 +93,7 @@ final class AuthStore {
         isBusy = true
         defer { isBusy = false }
         let result = try await APIClient.shared.exchangeMagicToken(t)
-        // Auth exchange returns a thin user — load full campus profile from /me.
+        // Auth exchange returns a thin user - load full campus profile from /me.
         await persist(token: result.token, user: result.user, refreshProfile: true)
     }
 

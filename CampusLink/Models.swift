@@ -29,7 +29,7 @@ enum StudentAccountType: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .influencer: return "Influencer"
-        case .ambassador: return "Campus rep"
+        case .ambassador: return "Campus Ambassador"
         case .both: return "Both"
         case .athlete: return "Athlete"
         }
@@ -39,7 +39,7 @@ enum StudentAccountType: String, CaseIterable, Identifiable {
         switch self {
         case .influencer: return "2k+ followers"
         case .ambassador: return "Campus partnerships"
-        case .both: return "Creator + campus rep"
+        case .both: return "Creator + campus ambassador"
         case .athlete: return "NIL / sports"
         }
     }
@@ -395,7 +395,7 @@ struct CampusDrop: Identifiable, Hashable {
     var submissionStatusLabel: String {
         switch submissionStatus?.lowercased() {
         case "pending": return "Proof under review"
-        case "approved": return "Approved — payout pending"
+        case "approved": return "Approved - payout pending"
         case "paid": return "Paid"
         case "rejected": return "Rejected"
         default: return hasApplied ? "Claimed" : "Open"
@@ -472,7 +472,7 @@ struct CampusDrop: Identifiable, Hashable {
         brand.split(separator: " ").prefix(2).map { String($0.prefix(1)) }.joined()
     }
 
-    /// Real brand mark — Clearbit is dead; prefer explicit URL, else icon.horse PNG.
+    /// Real brand mark - Clearbit is dead; prefer explicit URL, else icon.horse PNG.
     var logoUrl: String? {
         if let brandLogoUrl { return brandLogoUrl }
         guard let domain = brandDomain else { return nil }
@@ -562,7 +562,7 @@ func makeSampleDrops(now: Date = Date()) -> [CampusDrop] {
             brandDomain: "notion.so",
             brandColor: Color(hex: "0B0B0D"),
             title: "2-minute campus productivity survey",
-            description: "Answer five questions about how you plan your week. Honest answers only — no wrong responses.",
+            description: "Answer five questions about how you plan your week. Honest answers only. No wrong responses.",
             category: .survey,
             payoutCents: 1200,
             maxCompletions: 200,
@@ -650,7 +650,7 @@ func makeSampleDrops(now: Date = Date()) -> [CampusDrop] {
             brandLogoUrl: "https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://robinhood.com&size=256",
             brandColor: Color(hex: "00C805"),
             title: "Open Robinhood and verify identity step",
-            description: "Download Robinhood, reach the identity verification screen, and submit a screenshot. Do not submit sensitive ID details — only the in-app progress screen.",
+            description: "Download Robinhood, reach the identity verification screen, and submit a screenshot. Do not submit sensitive ID details. Only the in-app progress screen.",
             category: .appInstall,
             payoutCents: 3000,
             maxCompletions: 80,
@@ -666,7 +666,7 @@ func makeSampleDrops(now: Date = Date()) -> [CampusDrop] {
                 "Install Robinhood",
                 "Create an account with your school email",
                 "Advance to the identity verification step",
-                "Screenshot that screen only — never photograph your ID"
+                "Screenshot that screen only. Never photograph your ID"
             ],
             eligibilityTags: ["iPhone", "18+", "Students"],
             audience: .students,
@@ -738,7 +738,7 @@ func makeSampleDrops(now: Date = Date()) -> [CampusDrop] {
             brandDomain: "spotify.com",
             brandColor: Color(hex: "1DB954"),
             title: "Campus listening habits feedback",
-            description: "Tell us how you discover new music on campus. Short written answers — about five minutes.",
+            description: "Tell us how you discover new music on campus. Short written answers. About five minutes.",
             category: .survey,
             payoutCents: 1000,
             maxCompletions: 300,

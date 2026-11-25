@@ -4,28 +4,44 @@ import UIKit
 struct ContentView: View {
     @State private var appState = AppState()
     @State private var auth = AuthStore()
+    /// Shown once per cold launch while logged out; Get started → SignInView.
+    @State private var showWelcome = true
     private let theme = CLTheme.light()
 
     var body: some View {
         Group {
-#if targetEnvironment(simulator)
-            // Simulator always boots into the main shell with a local preview profile.
-            MainApp(state: appState, auth: auth, theme: theme)
-#else
             if auth.isRestoring {
                 ZStack {
                     theme.bg.ignoresSafeArea()
                     ProgressView()
                 }
             } else if !auth.isSignedIn {
-                SignInView(auth: auth, theme: theme)
+                ZStack {
+                    if showWelcome {
+                        WelcomeView(theme: theme) {
+                            withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
+                                showWelcome = false
+                            }
+                        }
+                        .transition(.asymmetric(
+                            insertion: .opacity,
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        ))
+                    } else {
+                        SignInView(auth: auth, theme: theme)
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .trailing).combined(with: .opacity),
+                                removal: .opacity
+                            ))
+                    }
+                }
             } else if auth.needsWebOnboarding {
                 OnboardingFlowView(auth: auth, theme: theme)
             } else {
                 MainApp(state: appState, auth: auth, theme: theme)
             }
-#endif
         }
+        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: showWelcome)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .preferredColorScheme(.light)
@@ -42,21 +58,14 @@ struct ContentView: View {
                     await appState.refreshApplied()
                 }
             } else {
+                // Signed out - show Welcome again on the next unsigned cold path.
+                showWelcome = true
                 appState.logOut()
             }
         }
         .onChange(of: auth.user) { _, user in
             // Re-apply full /me (school, payouts, profiles) when auth refreshes the same user id.
             appState.syncSession(token: auth.sessionToken, user: user)
-        }
-        .onAppear {
-#if targetEnvironment(simulator)
-            if !auth.isSimulatorPreview {
-                auth.enterSimulatorPreview()
-            }
-            appState.syncSession(token: auth.sessionToken, user: auth.user)
-            appState.loadSimulatorPreviewCatalog()
-#endif
         }
         .task(id: auth.isSignedIn) {
             guard auth.isSignedIn else { return }

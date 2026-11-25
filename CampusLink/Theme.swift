@@ -128,7 +128,7 @@ struct CLTheme {
 
 // MARK: - Typography
 extension Font {
-    /// Bold rounded display — gamified / bubbly headers.
+    /// Bold rounded display - gamified / bubbly headers.
     static func display(_ size: CGFloat, weight: Font.Weight = .bold) -> Font {
         let resolved: Font.Weight = {
             switch weight {
