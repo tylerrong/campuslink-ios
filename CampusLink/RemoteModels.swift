@@ -37,6 +37,65 @@ struct RemoteOrgProfile: Codable, Hashable {
     let portfolio_link: String?
 }
 
+/// Stripe Connect Express status from mobile `/me` (`payouts`).
+struct RemotePayouts: Codable, Hashable {
+    /// `none` | `pending` | `ready`
+    let status: String
+    let ready: Bool
+    let details_submitted: Bool
+    let payouts_enabled: Bool
+    let has_account: Bool
+    let eligible: Bool
+    let manage_url: String?
+
+    static let empty = RemotePayouts(
+        status: "none",
+        ready: false,
+        details_submitted: false,
+        payouts_enabled: false,
+        has_account: false,
+        eligible: true,
+        manage_url: "https://joincampuslink.com/profile/payouts"
+    )
+
+    var manageURL: URL {
+        if let manage_url, let url = URL(string: manage_url) { return url }
+        return URL(string: "https://joincampuslink.com/profile/payouts")!
+    }
+
+    var statusLabel: String {
+        if !eligible { return "Payouts unavailable" }
+        switch status.lowercased() {
+        case "ready": return "Ready for payouts"
+        case "pending": return "Setup in progress"
+        default: return "Payouts not set up"
+        }
+    }
+
+    var statusDetail: String {
+        if !eligible {
+            return "Stripe Connect payouts are for campus student and org accounts."
+        }
+        switch status.lowercased() {
+        case "ready":
+            return "Approved Drop earnings can be sent to your connected account."
+        case "pending":
+            return "Finish Stripe Connect setup on CampusLink to receive payouts."
+        default:
+            return "Connect a bank account on CampusLink to cash out Drop earnings."
+        }
+    }
+
+    var ctaLabel: String {
+        if !eligible { return "View on CampusLink" }
+        switch status.lowercased() {
+        case "ready": return "Manage payouts"
+        case "pending": return "Continue setup"
+        default: return "Set up payouts"
+        }
+    }
+}
+
 struct RemoteUser: Hashable {
     let id: Int
     let email: String
@@ -49,6 +108,7 @@ struct RemoteUser: Hashable {
     var school: RemoteSchool? = nil
     var student: RemoteStudentProfile? = nil
     var org: RemoteOrgProfile? = nil
+    var payouts: RemotePayouts? = nil
 
     init(
         id: Int,
@@ -61,7 +121,8 @@ struct RemoteUser: Hashable {
         school_id: Int? = nil,
         school: RemoteSchool? = nil,
         student: RemoteStudentProfile? = nil,
-        org: RemoteOrgProfile? = nil
+        org: RemoteOrgProfile? = nil,
+        payouts: RemotePayouts? = nil
     ) {
         self.id = id
         self.email = email
@@ -74,6 +135,7 @@ struct RemoteUser: Hashable {
         self.school = school
         self.student = student
         self.org = org
+        self.payouts = payouts
     }
 
     var isCampusProfile: Bool {
@@ -164,7 +226,7 @@ struct RemoteUser: Hashable {
 extension RemoteUser: Codable {
     enum CodingKeys: String, CodingKey {
         case id, email, name, role, profile_type, registration_completed, picture, school_id
-        case school, student, org
+        case school, student, org, payouts
     }
 
     init(from decoder: Decoder) throws {
@@ -179,6 +241,7 @@ extension RemoteUser: Codable {
         school = try c.decodeIfPresent(RemoteSchool.self, forKey: .school)
         student = try c.decodeIfPresent(RemoteStudentProfile.self, forKey: .student)
         org = try c.decodeIfPresent(RemoteOrgProfile.self, forKey: .org)
+        payouts = try c.decodeIfPresent(RemotePayouts.self, forKey: .payouts)
         // Accept bool or 0/1 from older JWTs / D1 coercion
         if let b = try? c.decode(Bool.self, forKey: .registration_completed) {
             registration_completed = b
@@ -224,6 +287,8 @@ struct RemoteOpportunity: Codable, Identifiable, Hashable {
     let task_url: String?
     let task_type: String?
     let action_description: String?
+    /// Claim / proof review: pending | approved | rejected | paid
+    let submission_status: String?
     let brand: RemoteOpportunityBrand
 }
 
@@ -260,6 +325,7 @@ struct OnboardingRequest: Encodable, Sendable {
     var graduation_year: Int?
     var major: String?
     var student_type: String?
+    var sport: String?
     var bio: String?
     var linkedin_url: String?
     var tiktok_handle: String?
@@ -373,7 +439,8 @@ extension CampusDrop {
             compensationLabel: opp.compensation_label?.nonEmptyTrimmed,
             capacityHint: opp.capacity_hint?.nonEmptyTrimmed,
             applyNote: opp.apply_note?.nonEmptyTrimmed,
-            taskUrl: opp.task_url?.nonEmptyTrimmed
+            taskUrl: opp.task_url?.nonEmptyTrimmed,
+            submissionStatus: opp.submission_status?.nonEmptyTrimmed
         )
     }
 }
@@ -421,6 +488,7 @@ func makePreviewOpportunities() -> [CampusDrop] {
             task_url: nil,
             task_type: example.category,
             action_description: example.description,
+            submission_status: nil,
             brand: RemoteOpportunityBrand(
                 user_id: index + 1, name: example.brand, company_name: nil,
                 industry: nil, website: nil, picture: nil

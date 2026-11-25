@@ -324,16 +324,31 @@ struct CLCard<Content: View>: View {
 struct MetadataTag: View {
     let label: String
     var color: Color? = nil
+    var hugeIcon: HugeiconsAsset? = nil
+    var systemIcon: String? = nil
     let theme: CLTheme
 
     var body: some View {
-        Text(label)
-            .font(.bodyFont(11, weight: .semibold))
-            .foregroundColor(color == theme.primary ? .white : theme.textMuted)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(Capsule(style: .continuous).fill(color ?? theme.surfaceAlt))
-            .overlay(Capsule(style: .continuous).strokeBorder(theme.ink.opacity(0.08), lineWidth: theme.borderThinWidth))
+        let fg: Color = color == theme.primary ? .white : theme.textMuted
+        HStack(spacing: 5) {
+            if let hugeIcon {
+                hugeIcon.image()
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 11, height: 11)
+            } else if let systemIcon {
+                Image(systemName: systemIcon)
+                    .font(.system(size: 10, weight: .semibold))
+            }
+            Text(label)
+                .font(.bodyFont(11, weight: .semibold))
+        }
+        .foregroundColor(fg)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Capsule(style: .continuous).fill(color ?? theme.surfaceAlt))
+        .overlay(Capsule(style: .continuous).strokeBorder(theme.ink.opacity(0.08), lineWidth: theme.borderThinWidth))
     }
 }
 

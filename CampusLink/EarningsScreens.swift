@@ -12,7 +12,9 @@ struct EarningsScreen: View {
             VStack(alignment: .leading, spacing: 0) {
                 CLScreenHeader(
                     title: "Earnings",
-                    subtitle: "Payouts are coming soon.",
+                    subtitle: state.isLiveSession
+                        ? "Drop payouts via Stripe Connect."
+                        : "Simulator preview — no real money moves.",
                     theme: theme
                 )
 
@@ -20,17 +22,23 @@ struct EarningsScreen: View {
                     .padding(.horizontal, 20)
                     .padding(.bottom, 14)
 
+                if state.isLiveSession {
+                    payoutStatusCard
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 14)
+                }
+
                 HStack(spacing: 12) {
                     CLColorStatCard(
                         title: "Pending",
                         value: state.pendingBalanceCents.dollarsCompact,
-                        detail: "awaiting payout",
+                        detail: "under review",
                         icon: "hourglass",
                         fill: theme.accentOrange,
                         compact: true
                     )
                     CLColorStatCard(
-                        title: "Cashed out",
+                        title: "Paid out",
                         value: state.paidTotalCents.dollarsCompact,
                         detail: "all time",
                         icon: "checkmark.circle.fill",
@@ -41,13 +49,13 @@ struct EarningsScreen: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 22)
 
-                SectionHead(title: "Ledger", theme: theme)
+                SectionHead(title: "Activity", theme: theme)
 
                 if state.ledger.isEmpty {
                     CLEmptyState(
                         icon: "banknote",
                         title: "No earnings yet",
-                        subtitle: "Your Drop payouts will appear here.",
+                        subtitle: "Claim a Drop, submit proof, and payouts show up here after approval.",
                         actionLabel: "Browse Drops",
                         action: { state.setTab(.drops) },
                         theme: theme
@@ -71,28 +79,42 @@ struct EarningsScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.bg.ignoresSafeArea())
+        .task(id: state.sessionToken) {
+            guard state.isLiveSession else { return }
+            await state.refreshApplied()
+            await state.refreshProfile()
+        }
     }
 
     private var balanceCard: some View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Available")
+                Text(state.isLiveSession ? "Approved" : "Available")
                     .font(.bodyFont(14, weight: .bold))
                     .foregroundColor(.white.opacity(0.85))
                 Text(state.payableBalanceCents.dollarsFormatted)
                     .font(.display(40, weight: .black))
                     .foregroundColor(.white)
                     .tracking(-1.2)
+                if state.isLiveSession && state.payableBalanceCents > 0 && !state.payouts.ready {
+                    Text("Set up payouts to get paid")
+                        .font(.bodyFont(12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.9))
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Button {
-                state.push(.cashOut)
+                if state.isLiveSession {
+                    state.openPayoutsOnWeb()
+                } else {
+                    state.push(.cashOut)
+                }
             } label: {
                 HStack(spacing: 6) {
-                    Text("Cash out")
+                    Text(primaryCTALabel)
                         .font(.bodyFont(14, weight: .bold))
-                    Image(systemName: "chevron.right")
+                    Image(systemName: state.isLiveSession ? "arrow.up.right" : "chevron.right")
                         .font(.system(size: 11, weight: .bold))
                 }
                 .foregroundColor(theme.text)
@@ -102,13 +124,68 @@ struct EarningsScreen: View {
                 .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 4)
             }
             .buttonStyle(CLPressStyle())
-            .accessibilityLabel("Cash out")
-            .disabled(!state.canPreviewCashOut)
-            .opacity(state.canPreviewCashOut ? 1 : 0.55)
+            .accessibilityLabel(primaryCTALabel)
+            .disabled(!state.isLiveSession && !state.canPreviewCashOut)
+            .opacity(state.isLiveSession || state.canPreviewCashOut ? 1 : 0.55)
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .colorBlockCard(fill: theme.accentGreen, cornerRadius: theme.radiusXl)
+    }
+
+    private var primaryCTALabel: String {
+        if state.isLiveSession { return state.payouts.ctaLabel }
+        return "Cash out"
+    }
+
+    private var payoutStatusCard: some View {
+        Button {
+            state.openPayoutsOnWeb()
+        } label: {
+            HStack(spacing: 14) {
+                Circle()
+                    .fill(payoutStatusColor.opacity(0.15))
+                    .frame(width: 40, height: 40)
+                    .overlay(
+                        Image(systemName: payoutStatusIcon)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(payoutStatusColor)
+                    )
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(state.payouts.statusLabel)
+                        .font(.display(14, weight: .semibold))
+                        .foregroundColor(theme.text)
+                    Text(state.payouts.statusDetail)
+                        .font(.bodyFont(12))
+                        .foregroundColor(theme.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(theme.textFaint)
+            }
+            .padding(16)
+            .stickerCard(fill: theme.card, ink: theme.ink, cornerRadius: theme.radiusLg, shadow: theme.shadowSm, borderWidth: 0)
+        }
+        .buttonStyle(CLPressStyle())
+        .accessibilityLabel("\(state.payouts.statusLabel). \(state.payouts.ctaLabel)")
+    }
+
+    private var payoutStatusColor: Color {
+        switch state.payouts.status.lowercased() {
+        case "ready": return theme.success
+        case "pending": return theme.warning
+        default: return theme.primary
+        }
+    }
+
+    private var payoutStatusIcon: String {
+        switch state.payouts.status.lowercased() {
+        case "ready": return "checkmark.seal.fill"
+        case "pending": return "hourglass"
+        default: return "creditcard"
+        }
     }
 
     private func ledgerRow(_ entry: LedgerEntry) -> some View {
@@ -167,25 +244,52 @@ struct CashOutScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             CLTopBar(title: "Cash out", onBack: { state.pop() }, theme: theme)
-            VStack(alignment: .leading, spacing: 20) {
-                Text(state.payableBalanceCents.dollarsFormatted)
-                    .font(.display(44, weight: .bold))
-                    .foregroundColor(theme.text)
-                Text("Sending to \(state.payoutMethodLabel). Simulated transfer — no real money moves in this build.")
-                    .font(.bodyFont(15))
-                    .foregroundColor(theme.textMuted)
-
-                Spacer()
-
-                CLButton(label: "Confirm cash out", kind: .primary, size: .lg, full: true, theme: theme) {
-                    haptic(.medium)
-                    state.cashOut()
+            if state.isLiveSession {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Payouts run through Stripe Connect on CampusLink.")
+                        .font(.bodyFont(15))
+                        .foregroundColor(theme.textMuted)
+                    Text(state.payouts.statusDetail)
+                        .font(.bodyFont(14))
+                        .foregroundColor(theme.textMuted)
+                    Spacer()
+                    CLButton(
+                        label: state.payouts.ctaLabel,
+                        kind: .primary,
+                        size: .lg,
+                        icon: "arrow.up.right",
+                        showsChevron: false,
+                        full: true,
+                        theme: theme
+                    ) {
+                        haptic(.medium)
+                        state.openPayoutsOnWeb()
+                    }
+                    .padding(.bottom, 28)
                 }
-                .disabled(!state.canPreviewCashOut)
-                .padding(.bottom, 28)
+                .padding(.horizontal, 24)
+                .padding(.top, 12)
+            } else {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text(state.payableBalanceCents.dollarsFormatted)
+                        .font(.display(44, weight: .bold))
+                        .foregroundColor(theme.text)
+                    Text("Sending to \(state.payoutMethodLabel). Simulated transfer — no real money moves in this build.")
+                        .font(.bodyFont(15))
+                        .foregroundColor(theme.textMuted)
+
+                    Spacer()
+
+                    CLButton(label: "Confirm cash out", kind: .primary, size: .lg, full: true, theme: theme) {
+                        haptic(.medium)
+                        state.cashOut()
+                    }
+                    .disabled(!state.canPreviewCashOut)
+                    .padding(.bottom, 28)
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 12)
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 12)
         }
         .background(theme.bg.ignoresSafeArea())
         .navigationBarBackButtonHidden(true)
@@ -224,9 +328,15 @@ struct YouProfileScreen: View {
                     HStack(spacing: 12) {
                         Image(systemName: "creditcard")
                             .foregroundColor(theme.primary)
-                        Text("Payout method")
-                            .font(.bodyFont(15, weight: .semibold))
-                            .foregroundColor(theme.text)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Payouts")
+                                .font(.bodyFont(15, weight: .semibold))
+                                .foregroundColor(theme.text)
+                            Text(state.payoutMethodLabel)
+                                .font(.bodyFont(12))
+                                .foregroundColor(theme.textMuted)
+                                .lineLimit(1)
+                        }
                         Spacer()
                         Image(systemName: "chevron.right")
                             .font(.system(size: 12, weight: .semibold))
@@ -236,7 +346,7 @@ struct YouProfileScreen: View {
                     .stickerCard(fill: theme.card, ink: theme.ink, cornerRadius: theme.radiusLg, shadow: theme.shadowSm, borderWidth: 0)
                 }
                 .buttonStyle(CLPressStyle())
-                .accessibilityLabel("Payout method")
+                .accessibilityLabel("Payouts, \(state.payoutMethodLabel)")
                 .padding(.horizontal, 20)
                 .padding(.bottom, 16)
 
@@ -620,16 +730,54 @@ struct PayoutSettingsScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            CLTopBar(title: "Payout method", onBack: { state.pop() }, theme: theme)
-            if state.sessionToken != AuthStore.simulatorPreviewToken {
-                Spacer()
-                CLEmptyState(
-                    icon: "creditcard",
-                    title: "Payout setup is coming soon",
-                    subtitle: "You’ll be able to connect a payout method here.",
-                    theme: theme
-                )
-                Spacer()
+            CLTopBar(title: "Payouts", onBack: { state.pop() }, theme: theme)
+            if state.isLiveSession {
+                VStack(alignment: .leading, spacing: 18) {
+                    HStack(spacing: 14) {
+                        Circle()
+                            .fill((state.payouts.ready ? theme.success : theme.warning).opacity(0.15))
+                            .frame(width: 44, height: 44)
+                            .overlay(
+                                Image(systemName: state.payouts.ready ? "checkmark.seal.fill" : "creditcard")
+                                    .foregroundColor(state.payouts.ready ? theme.success : theme.warning)
+                            )
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(state.payouts.statusLabel)
+                                .font(.display(18, weight: .bold))
+                                .foregroundColor(theme.text)
+                            Text(state.payouts.statusDetail)
+                                .font(.bodyFont(14))
+                                .foregroundColor(theme.textMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .stickerCard(fill: theme.card, ink: theme.ink, cornerRadius: theme.radiusLg, shadow: theme.shadowSm, borderWidth: 0)
+
+                    Text("CampusLink uses Stripe Connect for Drop payouts. Set up or manage your bank account on the web — then return here to track earnings.")
+                        .font(.bodyFont(14))
+                        .foregroundColor(theme.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer()
+
+                    CLButton(
+                        label: state.payouts.ctaLabel,
+                        kind: .primary,
+                        size: .lg,
+                        icon: "arrow.up.right",
+                        showsChevron: false,
+                        full: true,
+                        theme: theme
+                    ) {
+                        haptic(.medium)
+                        state.openPayoutsOnWeb()
+                    }
+                    .padding(.bottom, 28)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
             } else {
                 VStack(spacing: 10) {
                     ForEach(methods, id: \.self) { method in
@@ -660,6 +808,10 @@ struct PayoutSettingsScreen: View {
         }
         .background(theme.bg.ignoresSafeArea())
         .navigationBarBackButtonHidden(true)
+        .task(id: state.sessionToken) {
+            guard state.isLiveSession else { return }
+            await state.refreshProfile()
+        }
     }
 }
 

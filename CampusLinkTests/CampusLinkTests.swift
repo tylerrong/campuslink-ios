@@ -12,36 +12,21 @@ final class CampusLinkTests: XCTestCase {
     }
 
     @MainActor
-    func testAcceptDropReservesSlotAndCreatesClaim() {
+    func testClaimMarksRemoteDropApplied() async {
         let state = AppState()
-        state.drops = makeSampleDrops()
+        state.sessionToken = AuthStore.simulatorPreviewToken
+        var drop = makeSampleDrops()[0]
+        drop.isRemoteOpportunity = true
+        drop.hasApplied = false
+        state.drops = [drop]
         state.profileKind = .student
         state.schoolId = "usc"
-        let id = "duet-download"
-        let before = state.drop(id: id)!.remainingSlots
 
-        state.acceptDrop(id: id)
+        await state.applyToOpportunity(id: drop.id)
 
-        XCTAssertEqual(state.drop(id: id)?.remainingSlots, before - 1)
-        XCTAssertNotNil(state.claim(forDropId: id))
-        XCTAssertEqual(state.currentTab, .active)
-    }
-
-    @MainActor
-    func testSubmitProofCreatesPendingLedger() {
-        let state = AppState()
-        state.drops = makeSampleDrops()
-        state.profileKind = .student
-        state.schoolId = "usc"
-        state.acceptDrop(id: "notion-survey")
-        guard let claim = state.claim(forDropId: "notion-survey") else {
-            return XCTFail("Missing claim")
-        }
-
-        state.submitProof(claimId: claim.id, imageData: nil, link: "", answer: "I plan my week with Notion every Sunday night.")
-
-        XCTAssertEqual(state.submission(forClaimId: claim.id)?.reviewStatus, .pending)
-        XCTAssertTrue(state.ledger.contains { $0.dropId == "notion-survey" && $0.type == .pending })
+        XCTAssertTrue(state.drop(id: drop.id)?.hasApplied == true)
+        XCTAssertTrue(state.appliedOpportunities.contains { $0.id == drop.id })
+        XCTAssertEqual(state.currentTab, .drops)
     }
 
     func testOrgOnlyDropsHiddenFromStudents() {
@@ -130,5 +115,57 @@ final class CampusLinkTests: XCTestCase {
         ]
         state.cashOut()
         XCTAssertEqual(state.payableBalanceCents, 1000)
+    }
+
+    func testRemotePayoutsDecodesFromMePayload() throws {
+        let data = Data("""
+        {
+          "id": 1, "email": "a@ucla.edu", "name": "Alex", "role": "user",
+          "profile_type": "student", "registration_completed": true,
+          "payouts": {
+            "status": "pending", "ready": false, "details_submitted": true,
+            "payouts_enabled": false, "has_account": true, "eligible": true,
+            "manage_url": "https://joincampuslink.com/profile/payouts"
+          }
+        }
+        """.utf8)
+        let user = try JSONDecoder().decode(RemoteUser.self, from: data)
+        XCTAssertEqual(user.payouts?.status, "pending")
+        XCTAssertEqual(user.payouts?.has_account, true)
+        XCTAssertEqual(user.payouts?.ctaLabel, "Continue setup")
+    }
+
+    @MainActor
+    func testRebuildLedgerFromClaimStatuses() {
+        let state = AppState()
+        state.sessionToken = "live-token"
+        var drop = makeSampleDrops()[0]
+        drop.isRemoteOpportunity = true
+        drop.hasApplied = true
+        drop.submissionStatus = "approved"
+        state.appliedOpportunities = [drop]
+        state.payouts = RemotePayouts(
+            status: "none", ready: false, details_submitted: false,
+            payouts_enabled: false, has_account: false, eligible: true,
+            manage_url: nil
+        )
+
+        state.rebuildLedgerFromClaims()
+
+        XCTAssertEqual(state.ledger.count, 1)
+        XCTAssertEqual(state.ledger.first?.type, .payable)
+        XCTAssertTrue(state.ledger.first?.note.contains("set up payouts") == true)
+    }
+
+    func testEventCategoryLabelIsShort() {
+        XCTAssertEqual(DropCategory.event.rawValue, "Event")
+        XCTAssertEqual(DropCategory(remoteValue: "event"), .event)
+    }
+
+    func testStudentAccountTypesMatchWeb() {
+        XCTAssertEqual(StudentAccountType.influencer.rawValue, "influencer")
+        XCTAssertEqual(StudentAccountType.ambassador.rawValue, "ambassador")
+        XCTAssertEqual(StudentAccountType.both.rawValue, "both")
+        XCTAssertEqual(StudentAccountType.athlete.rawValue, "athlete")
     }
 }

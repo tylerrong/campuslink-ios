@@ -5,7 +5,7 @@ import Observation
 enum AppTab: Hashable { case drops, active, earnings, you }
 
 enum AppScreen: Hashable {
-    case dropDetail, proofSubmit, editProfile, payoutSettings, cashOut
+    case dropDetail, editProfile, payoutSettings, cashOut
 }
 
 struct AppRoute: Hashable {
@@ -75,15 +75,20 @@ class AppState {
         didSet { UserDefaults.standard.set(payoutAlertsEnabled, forKey: Self.payoutAlertsKey) }
     }
     var payoutMethodLabel: String = "Add debit card"
-    var canPreviewCashOut: Bool {
-        sessionToken == AuthStore.simulatorPreviewToken && payableBalanceCents >= Self.cashOutMinimumCents
+    /// Stripe Connect status from `/me` (setup/manage happens on web).
+    var payouts: RemotePayouts = .empty
+    var isLiveSession: Bool {
+        guard let sessionToken else { return false }
+        return sessionToken != AuthStore.simulatorPreviewToken
     }
+    var canPreviewCashOut: Bool {
+        !isLiveSession && payableBalanceCents >= Self.cashOutMinimumCents
+    }
+    var payoutsManageURL: URL { payouts.manageURL }
 
     // MARK: Catalog + activity
     /// Live opportunities from joincampuslink.com (empty until signed in).
     var drops: [CampusDrop] = []
-    var claims: [DropClaim] = []
-    var submissions: [DropSubmission] = []
     var ledger: [LedgerEntry] = []
     var notifications: [AppNotification] = []
     var appliedOpportunities: [CampusDrop] = []
@@ -151,11 +156,10 @@ class AppState {
         remoteUser = nil
         drops = []
         appliedOpportunities = []
-        claims = []
-        submissions = []
         ledger = []
         notifications = []
         payoutMethodLabel = "Add debit card"
+        payouts = .empty
         applicationDates = [:]
         feedError = ""
         isLoadingFeed = false
@@ -216,6 +220,16 @@ class AppState {
         eduEmail = user.email
         verificationStatus = user.registration_completed ? .verified : .unverified
         pictureURL = user.picture
+        payouts = user.payouts ?? .empty
+        if !payouts.eligible {
+            payoutMethodLabel = "Not available"
+        } else if payouts.ready {
+            payoutMethodLabel = "Stripe Connect · ready"
+        } else if payouts.has_account || payouts.status == "pending" {
+            payoutMethodLabel = "Stripe Connect · finish setup"
+        } else {
+            payoutMethodLabel = "Set up payouts on CampusLink"
+        }
 
         schoolNumericId = user.school_id ?? user.school?.id
         if let remote = user.school {
@@ -349,6 +363,7 @@ class AppState {
                     drop.hasApplied = drop.hasApplied || appliedIDs.contains(drop.id)
                     return drop
                 }
+            expireEndedDropsIfNeeded()
         } catch {
             guard sessionToken == token, !Task.isCancelled else { return }
             if isUnauthorized(error) {
@@ -382,7 +397,11 @@ class AppState {
             let appliedIDs = Set(appliedOpportunities.map(\.id))
             for i in drops.indices where appliedIDs.contains(drops[i].id) {
                 drops[i].hasApplied = true
+                if let status = appliedOpportunities.first(where: { $0.id == drops[i].id })?.submissionStatus {
+                    drops[i].submissionStatus = status
+                }
             }
+            rebuildLedgerFromClaims()
         } catch {
             guard sessionToken == token, !Task.isCancelled else { return }
             if isUnauthorized(error) {
@@ -430,15 +449,29 @@ class AppState {
             applicationsRevision += 1
             applicationsError = ""
             drop.hasApplied = true
+            // Claim creates a pending submission on the server — mirror that until refreshApplied.
+            if drop.submissionStatus == nil {
+                drop.submissionStatus = "pending"
+            }
             if let index = drops.firstIndex(where: { $0.id == id }) {
                 drops[index].hasApplied = true
+                if drops[index].submissionStatus == nil {
+                    drops[index].submissionStatus = "pending"
+                }
             }
-            if !appliedOpportunities.contains(where: { $0.id == id }) {
+            if let index = appliedOpportunities.firstIndex(where: { $0.id == id }) {
+                appliedOpportunities[index] = drop
+            } else {
                 appliedOpportunities.insert(drop, at: 0)
             }
+            rebuildLedgerFromClaims()
             showToast(isNewClaim ? "Drop claimed" : "Already claimed", icon: "checkmark")
             if submittedFrom == AppRoute(.dropDetail, id: id), currentRoute == submittedFrom {
                 setTab(.active)
+            }
+            // Pull server submission_status / proof state for My Drops + Earnings.
+            if isLiveSession {
+                await refreshApplied()
             }
         } catch {
             guard sessionToken == token else { return }
@@ -466,7 +499,6 @@ class AppState {
     }
 
     var currentRoute: AppRoute? { navigationPath.last }
-    var detailId: String { currentRoute?.id ?? "" }
 
     var school: School {
         if let remoteSchool { return remoteSchool }
@@ -499,11 +531,6 @@ class AppState {
 
     var unreadNotificationCount: Int { notifications.filter { !$0.read }.count }
 
-    var activeClaims: [DropClaim] {
-        claims.filter { $0.status == .claimed || $0.status == .submitted }
-            .sorted { $0.acceptedAt > $1.acceptedAt }
-    }
-
     var pendingBalanceCents: Int {
         ledger.filter { $0.type == .pending }.reduce(0) { $0 + $1.amountCents }
     }
@@ -518,17 +545,41 @@ class AppState {
 
     var lifetimeEarnedCents: Int { payableBalanceCents + paidTotalCents + pendingBalanceCents }
 
-    // MARK: Lookups
-    func drop(id: String) -> CampusDrop? { drops.first { $0.id == id } }
-    func claim(id: String) -> DropClaim? { claims.first { $0.id == id } }
-    func claim(forDropId dropId: String) -> DropClaim? {
-        claims.first { $0.dropId == dropId && ($0.status == .claimed || $0.status == .submitted) }
+    /// Rebuild Earnings ledger from claimed Drop submission statuses (live session).
+    func rebuildLedgerFromClaims() {
+        guard isLiveSession else { return }
+        ledger = appliedOpportunities.compactMap { drop in
+            guard let type = drop.ledgerType, drop.payoutCents > 0 else { return nil }
+            let note: String
+            switch type {
+            case .pending: note = "Proof under review"
+            case .payable: note = payouts.ready ? "Approved — payout pending" : "Approved — set up payouts to get paid"
+            case .paid: note = "Paid out"
+            case .reversed: note = "Rejected"
+            }
+            return LedgerEntry(
+                id: "led-\(drop.id)",
+                dropId: drop.id,
+                amountCents: drop.payoutCents,
+                type: type,
+                createdAt: drop.startAt,
+                note: note
+            )
+        }
+        .sorted { $0.createdAt > $1.createdAt }
     }
-    func submission(forClaimId claimId: String) -> DropSubmission? {
-        submissions.first { $0.claimId == claimId }
+
+    @MainActor
+    func openPayoutsOnWeb() {
+        Task { await UIApplication.shared.open(payoutsManageURL) }
+    }
+
+    // MARK: Lookups
+    func drop(id: String) -> CampusDrop? {
+        appliedOpportunities.first { $0.id == id } ?? drops.first { $0.id == id }
     }
     func opportunity(id: String) -> CampusDrop? {
-        appliedOpportunities.first { $0.id == id } ?? drop(id: id)
+        appliedOpportunities.first { $0.id == id } ?? drops.first { $0.id == id }
     }
 
     // MARK: Eligibility + ranking
@@ -566,24 +617,9 @@ class AppState {
 
     // MARK: Actions
     @discardableResult
-    func expireStaleClaimsIfNeeded() -> Bool {
-        let now = Date()
+    func expireEndedDropsIfNeeded() -> Bool {
         var changed = false
-        for i in claims.indices where claims[i].status == .claimed && claims[i].expiresAt < now {
-            let dropId = claims[i].dropId
-            claims[i].status = .expired
-            if let di = drops.firstIndex(where: { $0.id == dropId }) {
-                drops[di].remainingSlots = min(drops[di].maxCompletions, drops[di].remainingSlots + 1)
-            }
-            pushNotification(
-                kind: .claimExpiring,
-                title: "Claim expired",
-                body: "Your reserved spot on \(drop(id: dropId)?.title ?? "a Drop") returned to the pool.",
-                dropId: dropId
-            )
-            changed = true
-        }
-        for i in drops.indices where drops[i].status == .live && drops[i].endAt < now {
+        for i in drops.indices where drops[i].status == .live && drops[i].endAt < Date() {
             drops[i].status = .ended
             changed = true
         }
@@ -591,178 +627,12 @@ class AppState {
     }
 
     @MainActor
-    func acceptDrop(id: String) {
-        if let drop = drop(id: id), drop.isRemoteOpportunity {
-            Task { await applyToOpportunity(id: id) }
-            return
-        }
-        expireStaleClaimsIfNeeded()
-        guard let idx = drops.firstIndex(where: { $0.id == id }) else { return }
-        let drop = drops[idx]
-        guard isEligible(drop) else {
-            showToast("You’re not eligible for this Drop", icon: "xmark")
-            return
-        }
-        if claim(forDropId: id) != nil {
-            showToast("Already claimed", icon: "checkmark")
-            push(.dropDetail, id: id)
-            return
-        }
-        guard drop.remainingSlots > 0 else {
-            showToast("No spots left", icon: "xmark")
-            return
-        }
-
-        drops[idx].remainingSlots -= 1
-        let claim = DropClaim(
-            id: "claim-\(id)-\(UUID().uuidString.prefix(6))",
-            dropId: id,
-            acceptedAt: Date(),
-            expiresAt: Date().addingTimeInterval(drop.completionWindowSeconds),
-            status: .claimed
-        )
-        claims.insert(claim, at: 0)
-        showToast("Drop accepted — timer started", icon: "bolt.fill")
-        pushNotification(
-            kind: .newDrop,
-            title: "Drop claimed",
-            body: "Finish \(drop.title) before the timer ends.",
-            dropId: id
-        )
-        pop()
-        setTab(.active)
-    }
-
-    @MainActor
-    func submitProof(claimId: String, imageData: Data?, link: String, answer: String) {
-        guard let cIdx = claims.firstIndex(where: { $0.id == claimId }) else { return }
-        guard claims[cIdx].status == .claimed ||
-                (claims[cIdx].status == .submitted &&
-                 submission(forClaimId: claimId)?.reviewStatus == .needsInfo) else { return }
-
-        let dropId = claims[cIdx].dropId
-        if let existing = submissions.firstIndex(where: { $0.claimId == claimId }) {
-            submissions[existing].imageData = imageData ?? submissions[existing].imageData
-            submissions[existing].link = link
-            submissions[existing].answer = answer
-            submissions[existing].reviewStatus = .pending
-            submissions[existing].rejectionReason = nil
-            submissions[existing].submittedAt = Date()
-            submissions[existing].reviewedAt = nil
-        } else {
-            let sub = DropSubmission(
-                id: "sub-\(UUID().uuidString.prefix(8))",
-                claimId: claimId,
-                dropId: dropId,
-                imageData: imageData,
-                link: link,
-                answer: answer,
-                reviewStatus: .pending,
-                rejectionReason: nil,
-                submittedAt: Date(),
-                reviewedAt: nil
-            )
-            submissions.insert(sub, at: 0)
-        }
-
-        claims[cIdx].status = .submitted
-
-        if let drop = drop(id: dropId) {
-            ledger.insert(
-                LedgerEntry(
-                    id: "led-\(UUID().uuidString.prefix(8))",
-                    dropId: dropId,
-                    amountCents: drop.payoutCents,
-                    type: .pending,
-                    createdAt: Date(),
-                    note: "Held in escrow — \(drop.title)"
-                ),
-                at: 0
-            )
-        }
-
-        showToast("Proof submitted", icon: "paperplane.fill")
-        pushNotification(
-            kind: .approved,
-            title: "Under review",
-            body: "We’ll verify your proof. Funds stay in escrow until approved.",
-            dropId: dropId
-        )
-        pop()
-
-        let outcomeRoll = Int.random(in: 0...9)
-        let delay = Double.random(in: 2.5...4.5)
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard let self else { return }
-            let outcome: ReviewStatus
-            switch outcomeRoll {
-            case 0: outcome = .rejected
-            case 1, 2: outcome = .needsInfo
-            default: outcome = .approved
-            }
-            self.simulateReview(claimId: claimId, outcome: outcome)
-        }
-    }
-
-    @MainActor
-    func simulateReview(claimId: String, outcome: ReviewStatus) {
-        guard let sIdx = submissions.firstIndex(where: { $0.claimId == claimId }) else { return }
-        let dropId = submissions[sIdx].dropId
-        submissions[sIdx].reviewStatus = outcome
-        submissions[sIdx].reviewedAt = Date()
-
-        switch outcome {
-        case .approved:
-            if let lIdx = ledger.firstIndex(where: { $0.dropId == dropId && $0.type == .pending }) {
-                ledger[lIdx].type = .payable
-                ledger[lIdx].note = "Approved — ready to cash out"
-            }
-            showToast("Drop approved — payout unlocked", icon: "checkmark.seal.fill")
-            pushNotification(
-                kind: .approved,
-                title: "Proof approved",
-                body: "\(drop(id: dropId)?.payoutLabel ?? "Payout") is now payable.",
-                dropId: dropId
-            )
-        case .rejected:
-            submissions[sIdx].rejectionReason = "Proof didn’t match the required screen. Read the instructions and try a different Drop."
-            if let lIdx = ledger.firstIndex(where: { $0.dropId == dropId && $0.type == .pending }) {
-                ledger[lIdx].type = .reversed
-                ledger[lIdx].note = "Rejected — escrow released"
-            }
-            if let cIdx = claims.firstIndex(where: { $0.id == claimId }) {
-                claims[cIdx].status = .expired
-            }
-            if let dIdx = drops.firstIndex(where: { $0.id == dropId }) {
-                drops[dIdx].remainingSlots = min(drops[dIdx].maxCompletions, drops[dIdx].remainingSlots + 1)
-            }
-            showToast("Proof rejected", icon: "xmark")
-            pushNotification(
-                kind: .rejected,
-                title: "Proof rejected",
-                body: submissions[sIdx].rejectionReason ?? "See Active for details.",
-                dropId: dropId
-            )
-        case .needsInfo:
-            submissions[sIdx].rejectionReason = "We need a clearer screenshot of the final screen. Resubmit when ready."
-            if let cIdx = claims.firstIndex(where: { $0.id == claimId }) {
-                claims[cIdx].status = .claimed
-                claims[cIdx].expiresAt = Date().addingTimeInterval(60 * 60)
-            }
-            showToast("More info needed", icon: "exclamationmark.bubble")
-            pushNotification(
-                kind: .needsInfo,
-                title: "Needs more info",
-                body: submissions[sIdx].rejectionReason ?? "Resubmit your proof.",
-                dropId: dropId
-            )
-        case .pending:
-            break
-        }
-    }
-
-    @MainActor
     func cashOut() {
+        // Live accounts: Stripe Connect pays out on the web after brand approval.
+        if isLiveSession {
+            openPayoutsOnWeb()
+            return
+        }
         let available = payableBalanceCents
         guard available >= Self.cashOutMinimumCents else {
             showToast("Minimum cash out is \(Self.cashOutMinimumCents.dollarsCompact)", icon: "xmark")
@@ -812,20 +682,6 @@ class AppState {
             ),
             at: 0
         )
-    }
-
-    func claimTimeRemaining(for claim: DropClaim) -> TimeInterval {
-        max(0, claim.expiresAt.timeIntervalSinceNow)
-    }
-
-    func claimTimeLabel(for claim: DropClaim) -> String {
-        let t = claimTimeRemaining(for: claim)
-        if t <= 0 { return "Expired" }
-        let h = Int(t) / 3600
-        let m = (Int(t) % 3600) / 60
-        let s = Int(t) % 60
-        if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
-        return String(format: "%d:%02d", m, s)
     }
 
     static func shareURL(path: String) -> URL {

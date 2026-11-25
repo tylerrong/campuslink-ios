@@ -25,6 +25,8 @@ struct OnboardingFlowView: View {
     @State private var fullName = ""
     @State private var graduationYear: Int = Calendar.current.component(.year, from: Date()) + 2
     @State private var major = ""
+    @State private var studentType: StudentAccountType = .ambassador
+    @State private var sport = ""
 
     // Org
     @State private var orgName = ""
@@ -110,6 +112,29 @@ struct OnboardingFlowView: View {
                             }
                         }
                         .padding(.bottom, 16)
+                        fieldLabel("How do you work with brands?")
+                        FlowLayout(spacing: 8) {
+                            ForEach(StudentAccountType.allCases) { type in
+                                CLChip(
+                                    label: type.label,
+                                    selected: studentType == type,
+                                    theme: theme
+                                ) {
+                                    studentType = type
+                                    if type != .athlete { sport = "" }
+                                }
+                            }
+                        }
+                        .padding(.bottom, 8)
+                        Text(studentType.detail)
+                            .font(.bodyFont(12))
+                            .foregroundColor(theme.textMuted)
+                            .padding(.bottom, studentType == .athlete ? 12 : 16)
+                        if studentType == .athlete {
+                            fieldLabel("Sport")
+                            textField("e.g. Soccer, Track", text: $sport)
+                                .padding(.bottom, 16)
+                        }
                     } else {
                         fieldLabel("Org name")
                         textField("e.g. Tri Delta, Startup Society", text: $orgName)
@@ -184,7 +209,7 @@ struct OnboardingFlowView: View {
                         .font(.display(34, weight: .bold))
                         .foregroundColor(theme.text)
                         .tracking(-1.2)
-                    Text("Brands use this when they review interest.")
+                    Text("Helps brands find the right campus partners.")
                         .font(.bodyFont(15))
                         .foregroundColor(theme.textMuted)
                         .padding(.top, 10)
@@ -297,8 +322,12 @@ struct OnboardingFlowView: View {
         let phone = primaryPhone.trimmingCharacters(in: .whitespacesAndNewlines)
         guard phone.count >= 7 else { return false }
         if profileKind == .student {
-            return fullName.trimmingCharacters(in: .whitespaces).count >= 2
+            let basics = fullName.trimmingCharacters(in: .whitespaces).count >= 2
                 && major.trimmingCharacters(in: .whitespaces).count >= 2
+            if studentType == .athlete {
+                return basics && sport.trimmingCharacters(in: .whitespaces).count >= 2
+            }
+            return basics
         }
         let members = Int(memberCount.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
         return orgName.trimmingCharacters(in: .whitespaces).count >= 2 && members > 0
@@ -359,24 +388,15 @@ struct OnboardingFlowView: View {
 
     private func loadSchools(query: String) async {
         guard let token = auth.sessionToken, !auth.isSimulatorPreview else {
-            // Fallback sample list for edge cases
-            schools = sampleSchools.prefix(20).enumerated().map { idx, s in
-                RemoteSchool(
-                    id: idx + 1,
-                    name: s.sub,
-                    short_name: s.name,
-                    primary_color: nil,
-                    secondary_color: nil,
-                    city: s.students,
-                    logo_url: s.logoUrl
-                )
-            }
+            schools = []
+            localError = "Sign in to load schools."
             return
         }
         schoolsLoading = true
         defer { schoolsLoading = false }
         do {
             schools = try await APIClient.shared.fetchSchools(token: token, query: query, limit: 40)
+            if !schools.isEmpty { localError = "" }
         } catch {
             if schools.isEmpty {
                 localError = error.localizedDescription
@@ -402,7 +422,11 @@ struct OnboardingFlowView: View {
             body.full_name = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
             body.graduation_year = graduationYear
             body.major = major.trimmingCharacters(in: .whitespacesAndNewlines)
-            body.student_type = "ambassador"
+            body.student_type = studentType.rawValue
+            if studentType == .athlete {
+                let sp = sport.trimmingCharacters(in: .whitespacesAndNewlines)
+                body.sport = sp.isEmpty ? nil : sp
+            }
             let tk = tiktok.trimmingCharacters(in: .whitespacesAndNewlines)
             body.tiktok_handle = tk.isEmpty ? nil : tk.replacingOccurrences(of: "@", with: "")
             let li = linkedin.trimmingCharacters(in: .whitespacesAndNewlines)

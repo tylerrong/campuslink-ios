@@ -113,7 +113,7 @@ actor APIClient {
         if status == 401 { throw APIError.unauthorized }
         try throwIfHTTPError(status: status, data: data)
         let res = try JSONDecoder().decode(ApplyResponse.self, from: data)
-        guard res.success else { throw APIError.message(res.error ?? "Could not apply") }
+        guard res.success else { throw APIError.message(res.error ?? "Could not claim Drop") }
         return res.already_applied != true
     }
 

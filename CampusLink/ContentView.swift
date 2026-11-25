@@ -45,8 +45,9 @@ struct ContentView: View {
                 appState.logOut()
             }
         }
-        .onChange(of: auth.user?.id) { _, _ in
-            appState.syncSession(token: auth.sessionToken, user: auth.user)
+        .onChange(of: auth.user) { _, user in
+            // Re-apply full /me (school, payouts, profiles) when auth refreshes the same user id.
+            appState.syncSession(token: auth.sessionToken, user: user)
         }
         .onAppear {
 #if targetEnvironment(simulator)
@@ -181,7 +182,6 @@ struct MainApp: View {
     private func routeScreen(_ route: AppRoute) -> some View {
         switch route.screen {
         case .dropDetail: DropDetailScreen(state: state, opportunityID: route.id, theme: theme)
-        case .proofSubmit: ProofSubmitScreen(state: state, theme: theme)
         case .editProfile: EditProfileScreen(state: state, theme: theme)
         case .payoutSettings: PayoutSettingsScreen(state: state, theme: theme)
         case .cashOut: CashOutScreen(state: state, theme: theme)

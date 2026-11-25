@@ -1,4 +1,5 @@
 import SwiftUI
+import Hugeicons
 
 // MARK: - Profile
 
@@ -12,6 +13,34 @@ enum ProfileKind: String, CaseIterable, Identifiable {
         switch self {
         case .student: "Student"
         case .org: "Campus org"
+        }
+    }
+}
+
+/// Matches web onboarding `student_type` (influencer / ambassador / both / athlete).
+enum StudentAccountType: String, CaseIterable, Identifiable {
+    case influencer
+    case ambassador
+    case both
+    case athlete
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .influencer: return "Influencer"
+        case .ambassador: return "Campus rep"
+        case .both: return "Both"
+        case .athlete: return "Athlete"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .influencer: return "2k+ followers"
+        case .ambassador: return "Campus partnerships"
+        case .both: return "Creator + campus rep"
+        case .athlete: return "NIL / sports"
         }
     }
 }
@@ -105,12 +134,6 @@ struct School: Identifiable, Hashable {
     var logoUrl: String? = nil
 }
 
-struct Interest: Identifiable {
-    let id: String
-    let label: String
-    let icon: String
-}
-
 // MARK: - Drops
 
 enum DropFeedFilter: String, CaseIterable, Identifiable {
@@ -125,6 +148,21 @@ enum DropFeedFilter: String, CaseIterable, Identifiable {
     case signup = "Sign-up"
 
     var id: Self { self }
+
+    /// Matches web `paidTaskTypeIcons` (Hugeicons) for filter chips.
+    var hugeIcon: HugeiconsAsset? {
+        switch self {
+        case .all: return Hugeicons.gridView
+        case .appInstall: return Hugeicons.download01
+        case .social: return Hugeicons.camera01
+        case .survey: return Hugeicons.clipboardList
+        case .referral: return Hugeicons.userAdd01
+        case .review: return Hugeicons.star
+        case .checkIn: return Hugeicons.location01
+        case .follow: return Hugeicons.favourite
+        case .signup: return Hugeicons.userCircle
+        }
+    }
 
     func matches(_ drop: CampusDrop) -> Bool {
         switch self {
@@ -153,7 +191,7 @@ enum DropCategory: String, CaseIterable, Identifiable {
     case activation = "Campus activation"
     case ambassador = "Ambassador"
     case content = "Social"
-    case event = "Event partnership"
+    case event = "Event"
     case other = "Other"
 
     init(remoteValue: String?) {
@@ -189,6 +227,21 @@ enum DropCategory: String, CaseIterable, Identifiable {
         case .ambassador: "person.2"
         case .event: "calendar"
         case .other: "briefcase"
+        }
+    }
+
+    /// Matches web `paidTaskTypeIcons` where the category is a Drop type.
+    var hugeIcon: HugeiconsAsset? {
+        switch self {
+        case .appInstall: return Hugeicons.download01
+        case .content, .socialPost: return Hugeicons.camera01
+        case .survey: return Hugeicons.clipboardList
+        case .referral: return Hugeicons.userAdd01
+        case .review: return Hugeicons.star
+        case .checkIn: return Hugeicons.location01
+        case .follow: return Hugeicons.favourite
+        case .signup: return Hugeicons.userCircle
+        default: return nil
         }
     }
 
@@ -265,6 +318,8 @@ struct CampusDrop: Identifiable, Hashable {
     let applyNote: String?
     /// External Drop link (App Store, survey, etc.).
     let taskUrl: String?
+    /// Remote claim status: pending | approved | rejected | paid
+    var submissionStatus: String?
 
     init(
         id: String,
@@ -293,7 +348,8 @@ struct CampusDrop: Identifiable, Hashable {
         compensationLabel: String? = nil,
         capacityHint: String? = nil,
         applyNote: String? = nil,
-        taskUrl: String? = nil
+        taskUrl: String? = nil,
+        submissionStatus: String? = nil
     ) {
         self.id = id
         self.brand = brand
@@ -322,6 +378,28 @@ struct CampusDrop: Identifiable, Hashable {
         self.capacityHint = capacityHint
         self.applyNote = applyNote
         self.taskUrl = taskUrl
+        self.submissionStatus = submissionStatus
+    }
+
+    /// Map remote submission_status → ledger bucket (nil / rejected excluded).
+    var ledgerType: LedgerEntryType? {
+        switch submissionStatus?.lowercased() {
+        case "pending": return .pending
+        case "approved": return .payable
+        case "paid": return .paid
+        case "rejected": return .reversed
+        default: return nil
+        }
+    }
+
+    var submissionStatusLabel: String {
+        switch submissionStatus?.lowercased() {
+        case "pending": return "Proof under review"
+        case "approved": return "Approved — payout pending"
+        case "paid": return "Paid"
+        case "rejected": return "Rejected"
+        default: return hasApplied ? "Claimed" : "Open"
+        }
     }
 
     var payoutLabel: String {
@@ -402,40 +480,6 @@ struct CampusDrop: Identifiable, Hashable {
     }
 }
 
-enum ClaimStatus: String {
-    case claimed, submitted, expired
-}
-
-struct DropClaim: Identifiable, Hashable {
-    let id: String
-    let dropId: String
-    let acceptedAt: Date
-    var expiresAt: Date
-    var status: ClaimStatus
-}
-
-enum ReviewStatus: String, CaseIterable, Identifiable {
-    case pending = "Pending review"
-    case approved = "Approved"
-    case rejected = "Rejected"
-    case needsInfo = "Needs more info"
-
-    var id: String { rawValue }
-}
-
-struct DropSubmission: Identifiable, Hashable {
-    let id: String
-    let claimId: String
-    let dropId: String
-    var imageData: Data?
-    var link: String
-    var answer: String
-    var reviewStatus: ReviewStatus
-    var rejectionReason: String?
-    var submittedAt: Date
-    var reviewedAt: Date?
-}
-
 enum LedgerEntryType: String {
     case pending
     case payable
@@ -479,17 +523,6 @@ let sampleSchools: [School] = [
     School(id: "umich",    name: "Michigan",       sub: "University of Michigan",               color: Color(hex: "00274C"), students: "1.9k", logoUrl: espn(130)),
     School(id: "utexas",   name: "UT Austin",      sub: "University of Texas at Austin",        color: Color(hex: "BF5700"), students: "2.8k", logoUrl: espn(251)),
     School(id: "nyu",      name: "NYU",            sub: "New York University",                  color: Color(hex: "57068C"), students: "2.2k", logoUrl: nil),
-]
-
-let studentInterests: [Interest] = [
-    Interest(id: "apps", label: "Apps & tech", icon: "iphone"),
-    Interest(id: "content", label: "Content", icon: "video"),
-    Interest(id: "foodbev", label: "Food & bev", icon: "cup.and.saucer"),
-    Interest(id: "fitness", label: "Fitness", icon: "figure.run"),
-    Interest(id: "finance", label: "Finance", icon: "dollarsign.circle"),
-    Interest(id: "fashion", label: "Fashion", icon: "tshirt"),
-    Interest(id: "gaming", label: "Gaming", icon: "gamecontroller"),
-    Interest(id: "social", label: "Social impact", icon: "heart"),
 ]
 
 func makeSampleDrops(now: Date = Date()) -> [CampusDrop] {

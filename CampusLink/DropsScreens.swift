@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Drop card (mirrors web GigCard content)
 struct DropCard: View {
@@ -27,7 +28,12 @@ struct DropCard: View {
                 .foregroundColor(theme.textMuted)
                 .lineLimit(2)
 
-            MetadataTag(label: drop.category.rawValue, theme: theme)
+            MetadataTag(
+                label: drop.category.rawValue,
+                hugeIcon: drop.category.hugeIcon,
+                systemIcon: drop.category.hugeIcon == nil ? drop.category.icon : nil,
+                theme: theme
+            )
 
             Divider().overlay(theme.line)
 
@@ -248,7 +254,12 @@ struct DropsFeedScreen: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(DropFeedFilter.allCases) { filter in
-                    CLChip(label: filter.rawValue, selected: selectedFilter == filter, theme: theme) {
+                    CLChip(
+                        label: filter.rawValue,
+                        selected: selectedFilter == filter,
+                        hugeIcon: filter.hugeIcon,
+                        theme: theme
+                    ) {
                         selectedFilter = filter
                     }
                     .accessibilityAddTraits(selectedFilter == filter ? .isSelected : [])
@@ -278,177 +289,311 @@ struct DropsFeedScreen: View {
     }
 }
 
-// MARK: - Drop detail
+// MARK: - Drop detail (brand-wash hero + sheet — Claim CTA)
 struct DropDetailScreen: View {
     @Bindable var state: AppState
     let opportunityID: String
     let theme: CLTheme
 
-    var body: some View {
-        VStack(spacing: 0) {
-            CLTopBar(title: "Drop", onBack: { state.pop() }, trailing: shareButton, theme: theme)
+    private var drop: CampusDrop? { state.opportunity(id: opportunityID) }
 
-            if let drop = state.opportunity(id: opportunityID) {
-                CLScrollView(theme: theme, bottomFade: 0) {
-                    detail(drop)
+    /// Window safe-area top — NavStack won't give that strip to SwiftUI content.
+    private var topInset: CGFloat {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+        let inset = scene?.windows.first(where: \.isKeyWindow)?.safeAreaInsets.top
+            ?? scene?.windows.first?.safeAreaInsets.top
+            ?? 59
+        return max(inset, 47)
+    }
+
+    var body: some View {
+        Group {
+            if let drop {
+                ZStack(alignment: .bottom) {
+                    ScrollView(showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            hero(drop)
+                                .padding(.top, -topInset)
+
+                            sheet(drop)
+                                .offset(y: -18)
+                        }
+                    }
+                    .contentMargins(.top, 0, for: .scrollContent)
+                    .contentMargins(.top, 0, for: .scrollIndicators)
+
+                    bottomBar(drop)
                 }
-                bottomBar(drop)
+                .background {
+                    VStack(spacing: 0) {
+                        drop.brandColor
+                            .frame(height: topInset)
+                            .frame(maxWidth: .infinity)
+                        theme.bg
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    .ignoresSafeArea()
+                }
             } else {
-                CLEmptyState(
-                    icon: "briefcase",
-                    title: "Drop unavailable",
-                    subtitle: "This Drop may have closed or been removed.",
-                    actionLabel: "Go back",
-                    action: { state.pop() },
-                    theme: theme
-                )
-                .padding(.horizontal, 20)
-                .padding(.top, 40)
-                Spacer()
+                VStack(spacing: 0) {
+                    CLTopBar(title: "Drop", onBack: { state.pop() }, theme: theme)
+                    CLEmptyState(
+                        icon: "briefcase",
+                        title: "Drop unavailable",
+                        subtitle: "This Drop may have closed or been removed.",
+                        actionLabel: "Go back",
+                        action: { state.pop() },
+                        theme: theme
+                    )
+                    .padding(.horizontal, 20)
+                    .padding(.top, 40)
+                    Spacer()
+                }
+                .background(theme.bg.ignoresSafeArea())
             }
         }
-        .background(theme.bg.ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .navigationBarBackButtonHidden(true)
     }
 
-    private var shareButton: AnyView? {
-        guard state.sessionToken != AuthStore.simulatorPreviewToken,
-              let drop = state.opportunity(id: opportunityID),
-              let url = drop.webProofURL else { return nil }
-        return AnyView(
-            ShareLink(item: url) {
-                Image(systemName: "square.and.arrow.up")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(theme.text)
-                    .frame(width: 42, height: 42)
-                    .background(theme.surfaceAlt, in: Circle())
-            }
-            .accessibilityLabel("Share Drop")
-        )
-    }
+    private func hero(_ drop: CampusDrop) -> some View {
+        let height = 236 + topInset
+        let heroTitle = drop.hasApplied ? "Claimed" : "Claim"
+        return ZStack(alignment: .top) {
+            Rectangle().fill(drop.brandColor)
 
-    private func detail(_ drop: CampusDrop) -> some View {
-        VStack(alignment: .leading, spacing: 22) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 10) {
-                    OpportunityBrandMark(drop: drop)
-                    Text(drop.brand)
-                        .font(.bodyFont(14, weight: .semibold))
-                        .foregroundColor(theme.textMuted)
-                    Spacer(minLength: 0)
-                    MetadataTag(label: drop.payoutLabel, color: theme.primary, theme: theme)
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .clear, location: 0.42),
+                            .init(color: Color.black.opacity(0.45), location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+
+            heroBrandMark(drop)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .padding(.trailing, 22)
+                .padding(.bottom, 78)
+
+            VStack(spacing: 0) {
+                HStack {
+                    Button { state.pop() } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(width: 40, height: 40)
+                            .background(Circle().fill(Color.black.opacity(0.28)))
+                    }
+                    .buttonStyle(CLPressStyle())
+                    .accessibilityLabel("Back")
+
+                    Spacer()
+
+                    ShareLink(item: drop.webProofURL ?? AppState.shareURL(path: "offers/gigs/\(drop.id)")) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(width: 40, height: 40)
+                            .background(Circle().fill(Color.black.opacity(0.28)))
+                    }
+                    .accessibilityLabel("Share Drop")
                 }
-                Text(drop.title)
-                    .font(.display(30, weight: .black))
-                    .foregroundColor(theme.text)
-                    .accessibilityAddTraits(.isHeader)
-                HStack(spacing: 8) {
-                    MetadataTag(label: drop.category.rawValue, theme: theme)
-                    if drop.hasApplied {
-                        MetadataTag(label: "Claimed", color: theme.success, theme: theme)
+                .padding(.horizontal, 20)
+                .padding(.top, topInset + 10)
+
+                Spacer(minLength: 0)
+
+                HStack(alignment: .bottom) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(heroTitle)
+                            .font(.display(36, weight: .bold))
+                            .tracking(-0.8)
+                            .foregroundColor(.white)
+                        Text(drop.payoutLabel)
+                            .font(.display(18, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.92))
+                    }
+
+                    Spacer(minLength: 12)
+
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Label(drop.timeLeftLabel, systemImage: "clock")
+                            .font(.display(13, weight: .semibold))
+                            .foregroundColor(.white)
+                        Text(drop.spotsLabel)
+                            .font(.bodyFont(12, weight: .medium))
+                            .foregroundColor(.white.opacity(0.8))
                     }
                 }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 36)
             }
+        }
+        .frame(height: height)
+        .frame(maxWidth: .infinity)
+    }
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                factCell("Payout", value: drop.payoutLabel)
-                factCell("Deadline", value: drop.deadlineLabel ?? "—")
-                factCell("Spots", value: drop.spotsLabel)
-                factCell("Type", value: drop.category.rawValue)
+    private func heroBrandMark(_ drop: CampusDrop) -> some View {
+        Group {
+            if let urlStr = drop.logoUrl, let url = URL(string: urlStr) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFit().padding(16)
+                    default:
+                        Text(drop.initials)
+                            .font(.display(22, weight: .bold))
+                            .foregroundColor(drop.brandColor)
+                    }
+                }
+            } else {
+                Text(drop.initials)
+                    .font(.display(22, weight: .bold))
+                    .foregroundColor(drop.brandColor)
             }
+        }
+        .frame(width: 72, height: 72)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white)
+        )
+        .accessibilityHidden(true)
+    }
 
+    private func sheet(_ drop: CampusDrop) -> some View {
+        VStack(alignment: .leading, spacing: 24) {
             VStack(alignment: .leading, spacing: 8) {
-                sectionTitle("About this Drop")
+                Text(drop.brand)
+                    .font(.bodyFont(13, weight: .semibold))
+                    .foregroundColor(theme.primary)
+                Text(drop.title)
+                    .font(.display(28, weight: .bold))
+                    .foregroundColor(theme.text)
+                    .tracking(-0.6)
+                    .accessibilityAddTraits(.isHeader)
                 Text(drop.description)
                     .font(.bodyFont(15))
                     .foregroundColor(theme.textMuted)
                     .lineSpacing(3)
+
+                if let taskURL = drop.taskLinkURL {
+                    Link(destination: taskURL) {
+                        Text("\(drop.category.taskUrlButtonLabel): \(taskURL.absoluteString)")
+                            .font(.bodyFont(14, weight: .medium))
+                            .foregroundColor(theme.textMuted)
+                            .multilineTextAlignment(.leading)
+                    }
+                    .padding(.top, 4)
+                }
             }
 
             if !drop.instructions.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    sectionTitle("What you need to do")
-                    ForEach(Array(drop.instructions.enumerated()), id: \.offset) { _, step in
-                        Label(step, systemImage: "smallcircle.filled.circle")
-                            .font(.bodyFont(14))
-                            .foregroundColor(theme.textMuted)
-                    }
-                    if let taskURL = drop.taskLinkURL {
-                        Link(destination: taskURL) {
-                            Text(drop.category.taskUrlButtonLabel)
-                                .font(.bodyFont(15, weight: .bold))
-                                .foregroundColor(theme.primary)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(
-                                    RoundedRectangle(cornerRadius: theme.radiusMd, style: .continuous)
-                                        .strokeBorder(theme.primary.opacity(0.35), lineWidth: 1.5)
-                                )
+                section("How it works") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(Array(drop.instructions.enumerated()), id: \.offset) { i, step in
+                            HStack(alignment: .top, spacing: 12) {
+                                Text("\(i + 1)")
+                                    .font(.bodyFont(12, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .frame(width: 24, height: 24)
+                                    .background(Circle().fill(theme.primary))
+                                Text(step)
+                                    .font(.bodyFont(14))
+                                    .foregroundColor(theme.text)
+                            }
                         }
-                        .padding(.top, 4)
                     }
                 }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(theme.surfaceAlt, in: RoundedRectangle(cornerRadius: theme.radiusLg))
             }
 
             if !drop.proofRequirements.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    sectionTitle("Proof required")
-                    ForEach(drop.proofRequirements) { req in
-                        Text(req.label)
-                            .font(.bodyFont(15))
-                            .foregroundColor(theme.textMuted)
-                    }
-                    if let deadline = drop.deadlineLabel {
-                        Text("Deadline \(deadline)")
-                            .font(.bodyFont(12, weight: .semibold))
-                            .foregroundColor(theme.textFaint)
-                            .padding(.top, 4)
+                section("Proof required") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(drop.proofRequirements) { req in
+                            Label(req.label, systemImage: proofIcon(for: req.kind))
+                                .font(.bodyFont(14, weight: .medium))
+                                .foregroundColor(theme.text)
+                        }
+                        if let deadline = drop.deadlineLabel {
+                            Text("Deadline \(deadline)")
+                                .font(.bodyFont(12, weight: .semibold))
+                                .foregroundColor(theme.textFaint)
+                        }
                     }
                 }
             }
 
             if drop.hasApplied {
-                VStack(alignment: .leading, spacing: 8) {
-                    sectionTitle("Next step")
-                    Text(drop.applyNote ?? "Submit proof on CampusLink so the brand can review and pay you.")
-                        .font(.bodyFont(15))
-                        .foregroundColor(theme.textMuted)
-                    if let proofURL = drop.webProofURL {
-                        Link(destination: proofURL) {
-                            Label("Submit proof on CampusLink", systemImage: "arrow.up.right")
-                                .font(.bodyFont(14, weight: .semibold))
-                                .foregroundColor(theme.primary)
+                section("Next step") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(drop.applyNote ?? "Submit proof on CampusLink so the brand can review and pay you.")
+                            .font(.bodyFont(14))
+                            .foregroundColor(theme.textMuted)
+                        if let proofURL = drop.webProofURL {
+                            Link(destination: proofURL) {
+                                Label("Submit proof on CampusLink", systemImage: "arrow.up.right")
+                                    .font(.bodyFont(14, weight: .semibold))
+                                    .foregroundColor(theme.primary)
+                            }
                         }
                     }
                 }
             }
+
+            HStack(spacing: 8) {
+                MetadataTag(
+                    label: drop.category.rawValue,
+                    hugeIcon: drop.category.hugeIcon,
+                    systemIcon: drop.category.hugeIcon == nil ? drop.category.icon : nil,
+                    theme: theme
+                )
+                ForEach(drop.eligibilityTags, id: \.self) { tag in
+                    MetadataTag(label: tag, theme: theme)
+                }
+            }
+
+            Color.clear.frame(height: 120)
         }
+        .padding(.horizontal, 20)
+        .padding(.top, 22)
+        .padding(.bottom, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(20)
+        .background(theme.bg)
+        .clipShape(
+            UnevenRoundedRectangle(
+                topLeadingRadius: 24,
+                bottomLeadingRadius: 0,
+                bottomTrailingRadius: 0,
+                topTrailingRadius: 24,
+                style: .continuous
+            )
+        )
     }
 
-    private func sectionTitle(_ title: String) -> some View {
-        Text(title)
-            .font(.display(17, weight: .bold))
-            .foregroundColor(theme.text)
-            .accessibilityAddTraits(.isHeader)
-    }
-
-    private func factCell(_ title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title.uppercased())
-                .font(.eyebrow(10))
-                .foregroundColor(theme.textFaint)
-            Text(value)
-                .font(.bodyFont(14, weight: .semibold))
+    private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.display(17, weight: .bold))
                 .foregroundColor(theme.text)
-                .lineLimit(2)
+                .accessibilityAddTraits(.isHeader)
+            content()
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(theme.surfaceAlt, in: RoundedRectangle(cornerRadius: theme.radiusMd))
+    }
+
+    private func proofIcon(for kind: ProofRequirement.Kind) -> String {
+        switch kind {
+        case .screenshot: return "camera"
+        case .link: return "link"
+        case .text: return "text.alignleft"
+        case .receipt: return "doc.text"
+        }
     }
 
     @ViewBuilder
@@ -456,10 +601,16 @@ struct DropDetailScreen: View {
         Group {
             if drop.hasApplied {
                 VStack(spacing: 10) {
-                    Label("Claimed", systemImage: "checkmark.circle.fill")
-                        .font(.bodyFont(15, weight: .semibold))
-                        .foregroundColor(theme.success)
-                        .accessibilityIdentifier("claim-status")
+                    CLButton(
+                        label: "Claimed",
+                        kind: .surface,
+                        size: .lg,
+                        full: true,
+                        theme: theme
+                    ) {
+                        state.setTab(.active)
+                    }
+                    .accessibilityIdentifier("claim-status")
                     if let proofURL = drop.webProofURL {
                         Link(destination: proofURL) {
                             Text("Submit proof")
@@ -472,9 +623,8 @@ struct DropDetailScreen: View {
                     }
                 }
             } else if !drop.isLive {
-                Text("This Drop is closed")
-                    .font(.bodyFont(15, weight: .semibold))
-                    .foregroundColor(theme.textMuted)
+                CLButton(label: "This Drop is closed", kind: .surface, size: .lg, full: true, theme: theme) {}
+                    .disabled(true)
             } else if state.isEligible(drop) {
                 CLButton(
                     label: state.applyingOpportunityID == drop.id ? "Claiming…" : "Claim",
@@ -488,14 +638,14 @@ struct DropDetailScreen: View {
                 }
                 .disabled(state.applyingOpportunityID != nil)
             } else {
-                Text("This Drop isn’t available to your profile.")
-                    .font(.bodyFont(15, weight: .semibold))
-                    .foregroundColor(theme.textMuted)
+                CLButton(label: "Not eligible", kind: .surface, size: .lg, full: true, theme: theme) {}
+                    .disabled(true)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 52)
         .padding(.horizontal, 20)
-        .padding(.vertical, 10)
-        .background(theme.bg)
+        .padding(.top, 12)
+        .padding(.bottom, 28)
+        .frame(maxWidth: .infinity)
+        .background(theme.bg.ignoresSafeArea(edges: .bottom))
     }
 }
